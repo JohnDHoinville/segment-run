@@ -99,3 +99,42 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+
+# Reset Git
+
+
+The repository belongs to "JohnDHoinville" but you're trying to push as "JohnAlfaJango". Here's how to fix this:
+
+* First, remove the existing credentials from your system:
+
+  **git** **config** **--global** **--unset** **user.name**
+
+  **git** **config** **--global** **--unset** **user.email**
+* Remove the stored credentials (on macOS):
+
+  **git** **credential-osxkeychain** **erase**
+
+  **host**=**github.com**
+
+  **protocol**=**https**
+
+(Press return twice after entering these lines)
+
+* Set up your correct GitHub credentials:
+
+  **git** **config** **--global** **user.name** **"JohnDHoinville"**
+
+  **git** **config** **--global** **user.email** **"your-email@example.com"**
+* Now try pushing again:
+
+  **git** **push** **-u** **origin** **master**
+
+Alternatively, you can also:
+
+* Use SSH instead of HTTPS by updating your remote URL:
+
+  **git** **remote** **set-url** **origin** **git@github.com:JohnDHoinville/segment-run.git**
+* Or update your GitHub credentials in your system's credential manager/keychain.
+
+Make sure you're using the GitHub account that has access to the repository (JohnDHoinville in this case).
