@@ -182,3 +182,44 @@ tr:hover {
     grid-template-columns: 1fr;
   }
 }
+
+.chart-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  height: 400px;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.segments h3 {
+  margin-bottom: 1.5rem;
+  color: #2c3e50;
+}
+
+@media (max-width: 768px) {
+  .chart-container {
+    padding: 10px;
+    height: 300px;
+  }
+}
+
+.avg-pace {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.result-value-secondary {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #2c3e50;
+  margin: 0.3rem 0;
+}

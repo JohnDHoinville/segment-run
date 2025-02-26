@@ -26,142 +26,133 @@ def analyze_run_file(file_path, pace_limit):
         print(f"Attempting to read file: {file_path}")
         tree = ET.parse(file_path)
         root = tree.getroot()
-        print(f"File parsed successfully. Root tag: {root.tag}")
         
-        # Define all possible namespaces
         ns = {
             'gpx': 'http://www.topografix.com/GPX/1/1',
             'ns3': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1'
         }
         
-        # Initialize all variables
-        trackpoints = []
-        total_distance = 0
+        # Initialize variables
         total_distance_all = 0
         total_hr = 0
         total_hr_count = 0
-        fast_hr = 0
-        fast_hr_count = 0
-        prev_lat = None
-        prev_lon = None
-        prev_time = None
-        
-        # Initialize fast segments tracking
         fast_segments = []
-        current_segment_distance = 0
-        current_segment_start_time = None
-        current_segment_hr = 0
-        current_segment_hr_count = 0
         
-        # Extract trackpoints with time and coordinates
+        # Variables for current segment
+        current_segment = None
+        
+        # Extract trackpoints
         trkpt_list = root.findall('.//gpx:trkpt', ns)
         print(f"Found {len(trkpt_list)} trackpoints")
+        
+        prev_point = None
+        segment_points = []  # Buffer to collect points for pace calculation
         
         for trkpt in trkpt_list:
             lat = float(trkpt.get('lat'))
             lon = float(trkpt.get('lon'))
             time_elem = trkpt.find('.//gpx:time', ns)
             
-            # Try different common paths for heart rate data
-            hr_elem = None
-            hr_paths = [
-                './/ns3:TrackPointExtension/ns3:hr',
-                './/gpx:extensions//hr',
-                './/extensions//hr',
-                './/hr'
-            ]
-            
-            for path in hr_paths:
+            # Get heart rate
+            hr = None
+            for path in ['.//ns3:TrackPointExtension/ns3:hr', './/gpx:extensions//hr', './/extensions//hr', './/hr']:
                 try:
                     hr_elem = trkpt.find(path, ns)
                     if hr_elem is not None:
+                        hr = int(hr_elem.text)
+                        total_hr += hr
+                        total_hr_count += 1
                         break
                 except:
                     continue
             
-            print(f"Point - Lat: {lat}, Lon: {lon}")  # Debug
-            
-            # Process heart rate if available
-            if hr_elem is not None:
-                try:
-                    hr = int(hr_elem.text)
-                    total_hr += hr
-                    total_hr_count += 1
-                except (ValueError, TypeError):
-                    pass  # Skip if heart rate value is invalid
-            
             if time_elem is not None:
-                time_str = time_elem.text
-                time = datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
-                print(f"Time: {time}")  # Debug
+                time = datetime.strptime(time_elem.text, '%Y-%m-%dT%H:%M:%SZ')
                 
-                if prev_lat is not None and prev_lon is not None and prev_time is not None:
-                    # Calculate distance between points - fixed haversine call
-                    distance = haversine(prev_lat, prev_lon, lat, lon)
-                    print(f"Distance between points: {distance} miles")  # Debug
+                current_point = {
+                    'lat': lat,
+                    'lon': lon,
+                    'time': time,
+                    'hr': hr
+                }
+                
+                if prev_point:
+                    # Calculate distance and pace between points
+                    distance = haversine(prev_point['lat'], prev_point['lon'], lat, lon)
+                    time_diff = (time - prev_point['time']).total_seconds() / 60  # minutes
+                    total_distance_all += distance
                     
-                    # Calculate time difference
-                    time_diff = (time - prev_time).total_seconds() / 60  # Convert to minutes
-                    
-                    if time_diff > 0:  # Avoid division by zero
-                        pace = time_diff / distance if distance > 0 else float('inf')
-                        print(f"Pace: {pace} min/mile")  # Debug
+                    if time_diff > 0 and distance > 0:
+                        pace = time_diff / distance  # minutes per mile
                         
-                        total_distance_all += distance
+                        # Start or continue segment
                         if pace <= pace_limit:
-                            total_distance += distance
-                            if hr_elem is not None:
-                                fast_hr += hr
-                                fast_hr_count += 1
+                            if current_segment is None:
+                                current_segment = {
+                                    'start_time': prev_point['time'].isoformat(),
+                                    'points': [prev_point],
+                                    'distance': 0,
+                                    'hr_values': [],
+                                    'time_diff': 0
+                                }
                             
-                            # Track fast segment
-                            if current_segment_start_time is None:
-                                current_segment_start_time = prev_time
-                            current_segment_distance += distance
-                            if hr_elem is not None:
-                                current_segment_hr += hr
-                                current_segment_hr_count += 1
-                        else:
-                            # End current fast segment if exists
-                            if current_segment_distance > 0:
-                                segment_duration = (prev_time - current_segment_start_time).total_seconds() / 60
-                                segment_pace = segment_duration / current_segment_distance
-                                segment_avg_hr = current_segment_hr / current_segment_hr_count if current_segment_hr_count > 0 else 0
-                                fast_segments.append((current_segment_distance, segment_pace, segment_avg_hr))
-                                current_segment_distance = 0
-                                current_segment_start_time = None
-                                current_segment_hr = 0
-                                current_segment_hr_count = 0
-            
-            prev_lat = lat
-            prev_lon = lon
-            if time_elem is not None:
-                prev_time = time
-            
-            # Break after a few points during debugging
-            if len(trackpoints) < 5:  # Only process first 5 points for debugging
-                trackpoints.append((lat, lon, time if time_elem is not None else None))
+                            # Add point to current segment
+                            current_segment['points'].append(current_point)
+                            current_segment['distance'] += distance
+                            if hr is not None:
+                                current_segment['hr_values'].append(hr)
+                            current_segment['time_diff'] += time_diff
+                            
+                        # End segment if pace is above limit and we have a current segment
+                        elif current_segment is not None:
+                            # Only create segment if it has meaningful distance/time
+                            if current_segment['distance'] >= 0.1:  # At least 0.1 miles
+                                current_segment['end_time'] = prev_point['time'].isoformat()
+                                
+                                # Calculate segment statistics
+                                segment_pace = current_segment['time_diff'] / current_segment['distance']
+                                segment_hr = (sum(current_segment['hr_values']) / 
+                                            len(current_segment['hr_values'])) if current_segment['hr_values'] else 0
+                                
+                                fast_segments.append({
+                                    'start_time': current_segment['start_time'],
+                                    'end_time': current_segment['end_time'],
+                                    'distance': current_segment['distance'],
+                                    'pace': segment_pace,
+                                    'avg_hr': segment_hr
+                                })
+                            
+                            current_segment = None
+                
+                prev_point = current_point
         
-        # Add final fast segment if exists
-        if current_segment_distance > 0:
-            segment_duration = (prev_time - current_segment_start_time).total_seconds() / 60
-            segment_pace = segment_duration / current_segment_distance
-            segment_avg_hr = current_segment_hr / current_segment_hr_count if current_segment_hr_count > 0 else 0
-            fast_segments.append((current_segment_distance, segment_pace, segment_avg_hr))
+        # Handle last segment if still open
+        if current_segment is not None and current_segment['distance'] >= 0.1:
+            current_segment['end_time'] = prev_point['time'].isoformat()
+            segment_pace = current_segment['time_diff'] / current_segment['distance']
+            segment_hr = (sum(current_segment['hr_values']) / 
+                        len(current_segment['hr_values'])) if current_segment['hr_values'] else 0
+            
+            fast_segments.append({
+                'start_time': current_segment['start_time'],
+                'end_time': current_segment['end_time'],
+                'distance': current_segment['distance'],
+                'pace': segment_pace,
+                'avg_hr': segment_hr
+            })
         
-        # Calculate averages
+        # Calculate totals
+        total_fast_distance = sum(segment['distance'] for segment in fast_segments)
         avg_hr_all = total_hr / total_hr_count if total_hr_count > 0 else 0
-        avg_hr_fast = fast_hr / fast_hr_count if fast_hr_count > 0 else 0
+        avg_hr_fast = (sum(segment['avg_hr'] for segment in fast_segments) / 
+                      len(fast_segments)) if fast_segments else 0
         
-        print(f"Final total_distance: {total_distance}")  # Debug
-        print(f"Final total_distance_all: {total_distance_all}")  # Debug
-        
-        return total_distance, total_distance_all, fast_segments, avg_hr_all, avg_hr_fast
+        return total_fast_distance, total_distance_all, fast_segments, avg_hr_all, avg_hr_fast
         
     except Exception as e:
         print(f"Error processing file: {str(e)}")
-        traceback.print_exc()  # This will print the full error traceback
-        return 0, 0, [], 0, 0  # Return empty list for fast_segments on error
+        traceback.print_exc()
+        return 0, 0, [], 0, 0
 
 def list_gpx_files(directory="~/Downloads"):
     # Expand the ~ to full home directory path
@@ -206,14 +197,7 @@ def save_run_results(file_path, pace_limit, results):
         "percentage_fast": round((total_distance/total_distance_all)*100 if total_distance_all > 0 else 0, 1),
         "avg_hr_all": round(avg_hr_all, 0),
         "avg_hr_fast": round(avg_hr_fast, 0),
-        "fast_segments": [
-            {
-                "distance": round(dist, 2),
-                "pace": round(pace, 1),
-                "avg_hr": round(hr, 0)
-            }
-            for dist, pace, hr in fast_segments
-        ]
+        "fast_segments": fast_segments  # No need to transform, already in correct format
     }
     
     # Write to log file
@@ -229,8 +213,10 @@ def save_run_results(file_path, pace_limit, results):
         
         if fast_segments:
             f.write("\nFast Segments:\n")
-            for i, segment in enumerate(run_data['fast_segments'], 1):
-                f.write(f"Segment {i}: {segment['distance']} miles at {segment['pace']} min/mile pace (Avg HR: {segment['avg_hr']} bpm)\n")
+            for i, segment in enumerate(fast_segments, 1):
+                f.write(f"Segment {i}: {segment['distance']:.2f} miles at {segment['pace']:.1f} min/mile pace "
+                       f"(Avg HR: {round(segment['avg_hr'])} bpm)\n")
+                f.write(f"  Time: {segment['start_time']} to {segment['end_time']}\n")
         else:
             f.write("\nNo segments under target pace\n")
         
@@ -262,7 +248,7 @@ def main():
     # Save results to log file
     run_data = save_run_results(file_path, pace_limit, result)
     
-    # Display results as before
+    # Display results
     total_distance, total_distance_all, fast_segments, avg_hr_all, avg_hr_fast = result
     
     print(f"\nAnalyzing file: {file_path}")
@@ -275,8 +261,10 @@ def main():
         
         if fast_segments:
             print("\nFast segment breakdown:")
-            for i, (dist, pace, hr) in enumerate(fast_segments, 1):
-                print(f"Segment {i}: {dist:.2f} miles at {pace:.1f} min/mile pace (Avg HR: {round(hr)} bpm)")
+            for i, segment in enumerate(fast_segments, 1):
+                print(f"Segment {i}: {segment['distance']:.2f} miles at {segment['pace']:.1f} min/mile pace "
+                      f"(Avg HR: {round(segment['avg_hr'])} bpm)")
+                print(f"  Time: {segment['start_time']} to {segment['end_time']}")
         else:
             print("\nNo segments found under the target pace.")
             

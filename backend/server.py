@@ -66,21 +66,14 @@ def analyze():
             # Run analysis
             total_distance, total_distance_all, fast_segments, avg_hr_all, avg_hr_fast = analyze_run_file(temp_path, pace_limit)
             
-            # Format results
+            # Format results - updated to handle new segment format
             results = {
                 'total_distance': float(total_distance_all),
                 'fast_distance': float(total_distance),
                 'percentage_fast': float((total_distance/total_distance_all)*100) if total_distance_all > 0 else 0,
                 'avg_hr_all': float(avg_hr_all) if avg_hr_all else 0,
                 'avg_hr_fast': float(avg_hr_fast) if avg_hr_fast else 0,
-                'fast_segments': [
-                    {
-                        'distance': float(dist),
-                        'pace': float(pace),
-                        'avg_hr': float(hr) if hr else 0
-                    }
-                    for dist, pace, hr in fast_segments
-                ]
+                'fast_segments': fast_segments  # Now passing the segments directly
             }
             
             print("Sending response:", results)  # Debug print

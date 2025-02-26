@@ -1,6 +1,26 @@
 import React, { useState } from 'react';
 import './App.css';
 import LoadingSpinner from './components/LoadingSpinner';
+import { Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 function App() {
   const API_URL = 'http://localhost:5001';
@@ -10,10 +30,24 @@ function App() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [runDate, setRunDate] = useState(null);
 
   const handleFileSelect = (event) => {
     setSelectedFile(event.target.files[0]);
     setError(null);
+    
+    // Extract date from filename
+    const filename = event.target.files[0].name;
+    const dateMatch = filename.match(/\d{4}-\d{2}-\d{2}/);
+    if (dateMatch) {
+      const date = new Date(dateMatch[0]);
+      setRunDate(date.toLocaleDateString('en-US', { 
+        weekday: 'long',
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      }));
+    }
   };
 
   const testBackendConnection = async () => {
@@ -86,10 +120,97 @@ function App() {
     }
   };
 
+  // Update the chart data preparation function
+  const prepareChartData = (segments) => {
+    return {
+      labels: segments.map((segment, index) => {
+        const startTime = segment.start_time ? 
+          new Date(segment.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
+          `Segment ${index + 1}`;
+        return startTime;
+      }),
+      datasets: [
+        {
+          label: 'Average Pace (min/mile)',
+          data: segments.map(segment => segment.pace),
+          backgroundColor: 'rgba(75, 192, 192, 0.6)',
+          borderColor: 'rgba(75, 192, 192, 1)',
+          borderWidth: 1,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Average Heart Rate (bpm)',
+          data: segments.map(segment => segment.avg_hr),
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+          borderColor: 'rgba(255, 99, 132, 1)',
+          borderWidth: 1,
+          yAxisID: 'y1'
+        }
+      ]
+    };
+  };
+
+  // Update chart options
+  const chartOptions = {
+    responsive: true,
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: 'Segment Time Range'
+        }
+      },
+      y: {
+        beginAtZero: true,
+        position: 'left',
+        title: {
+          display: true,
+          text: 'Pace (min/mile)'
+        }
+      },
+      y1: {
+        beginAtZero: true,
+        position: 'right',
+        grid: {
+          drawOnChartArea: false,
+        },
+        title: {
+          display: true,
+          text: 'Heart Rate (bpm)'
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: true,
+        text: 'Fast Segments Analysis'
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            const segment = results.fast_segments[context.dataIndex];
+            return [
+              `${label}: ${value.toFixed(1)}`,
+              `Distance: ${segment.distance.toFixed(2)} mi`,
+              `Duration: ${segment.duration || 'N/A'}`
+            ];
+          }
+        }
+      }
+    }
+  };
+
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Running Analysis</h1>
+        <h1>
+          {runDate ? `Running Analysis for ${runDate}` : 'Running Analysis'}
+        </h1>
         <p className="subtitle">Upload your GPX file to analyze pace and heart rate data</p>
       </header>
       
@@ -161,6 +282,14 @@ function App() {
                 <p className="result-percentage">
                   ({results.percentage_fast.toFixed(1)}% of total)
                 </p>
+                <div className="avg-pace">
+                  <p className="result-label">Average Pace</p>
+                  <p className="result-value-secondary">
+                    {(results.fast_segments.reduce((sum, segment) => sum + segment.pace, 0) / 
+                      results.fast_segments.length).toFixed(1)}
+                  </p>
+                  <p className="result-unit">min/mile</p>
+                </div>
               </div>
               
               <div className="result-item">
@@ -181,31 +310,45 @@ function App() {
             </div>
 
             {results.fast_segments.length > 0 && (
-              <div className="segments">
-                <h3>Fast Segments</h3>
-                <div className="table-container">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Segment</th>
-                        <th>Distance</th>
-                        <th>Pace</th>
-                        <th>Heart Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.fast_segments.map((segment, index) => (
-                        <tr key={index}>
-                          <td>{index + 1}</td>
-                          <td>{segment.distance.toFixed(2)} mi</td>
-                          <td>{segment.pace.toFixed(1)} min/mi</td>
-                          <td>{Math.round(segment.avg_hr)} bpm</td>
+              <>
+                <div className="segments">
+                  <h3>Fast Segments</h3>
+                  <div className="chart-container">
+                    <Bar 
+                      data={prepareChartData(results.fast_segments)} 
+                      options={chartOptions}
+                    />
+                  </div>
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Segment</th>
+                          <th>Start Time</th>
+                          <th>End Time</th>
+                          <th>Distance</th>
+                          <th>Pace</th>
+                          <th>Heart Rate</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {results.fast_segments.map((segment, index) => (
+                          <tr key={index}>
+                            <td>{index + 1}</td>
+                            <td>{segment.start_time ? 
+                              new Date(segment.start_time).toLocaleTimeString() : 'N/A'}</td>
+                            <td>{segment.end_time ? 
+                              new Date(segment.end_time).toLocaleTimeString() : 'N/A'}</td>
+                            <td>{segment.distance.toFixed(2)} mi</td>
+                            <td>{segment.pace.toFixed(1)} min/mi</td>
+                            <td>{Math.round(segment.avg_hr)} bpm</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         )}
