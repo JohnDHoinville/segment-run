@@ -36,18 +36,16 @@ def analyze_run_file(file_path, pace_limit):
         total_distance_all = 0
         total_hr = 0
         total_hr_count = 0
+        point_segments = []  # Store all point-to-point segments
         fast_segments = []
-        
-        # Variables for current segment
-        current_segment = None
         
         # Extract trackpoints
         trkpt_list = root.findall('.//gpx:trkpt', ns)
         print(f"Found {len(trkpt_list)} trackpoints")
         
         prev_point = None
-        segment_points = []  # Buffer to collect points for pace calculation
         
+        # First pass: Calculate all point-to-point segments
         for trkpt in trkpt_list:
             lat = float(trkpt.get('lat'))
             lon = float(trkpt.get('lon'))
@@ -77,7 +75,7 @@ def analyze_run_file(file_path, pace_limit):
                 }
                 
                 if prev_point:
-                    # Calculate distance and pace between points
+                    # Calculate segment metrics
                     distance = haversine(prev_point['lat'], prev_point['lon'], lat, lon)
                     time_diff = (time - prev_point['time']).total_seconds() / 60  # minutes
                     total_distance_all += distance
@@ -85,50 +83,62 @@ def analyze_run_file(file_path, pace_limit):
                     if time_diff > 0 and distance > 0:
                         pace = time_diff / distance  # minutes per mile
                         
-                        # Start or continue segment
-                        if pace <= pace_limit:
-                            if current_segment is None:
-                                current_segment = {
-                                    'start_time': prev_point['time'].isoformat(),
-                                    'points': [prev_point],
-                                    'distance': 0,
-                                    'hr_values': [],
-                                    'time_diff': 0
-                                }
-                            
-                            # Add point to current segment
-                            current_segment['points'].append(current_point)
-                            current_segment['distance'] += distance
-                            if hr is not None:
-                                current_segment['hr_values'].append(hr)
-                            current_segment['time_diff'] += time_diff
-                            
-                        # End segment if pace is above limit and we have a current segment
-                        elif current_segment is not None:
-                            # Only create segment if it has meaningful distance/time
-                            if current_segment['distance'] >= 0.1:  # At least 0.1 miles
-                                current_segment['end_time'] = prev_point['time'].isoformat()
-                                
-                                # Calculate segment statistics
-                                segment_pace = current_segment['time_diff'] / current_segment['distance']
-                                segment_hr = (sum(current_segment['hr_values']) / 
-                                            len(current_segment['hr_values'])) if current_segment['hr_values'] else 0
-                                
-                                fast_segments.append({
-                                    'start_time': current_segment['start_time'],
-                                    'end_time': current_segment['end_time'],
-                                    'distance': current_segment['distance'],
-                                    'pace': segment_pace,
-                                    'avg_hr': segment_hr
-                                })
-                            
-                            current_segment = None
+                        # Store point-to-point segment
+                        point_segments.append({
+                            'start_time': prev_point['time'].isoformat(),
+                            'end_time': time.isoformat(),
+                            'start_point': prev_point,
+                            'end_point': current_point,
+                            'distance': distance,
+                            'time_diff': time_diff,
+                            'pace': pace,
+                            'hr': prev_point['hr']
+                        })
                 
                 prev_point = current_point
         
+        # Second pass: Build fast segments from point segments
+        current_segment = None
+        
+        for segment in point_segments:
+            if segment['pace'] <= pace_limit:
+                if current_segment is None:
+                    # Start new segment
+                    current_segment = {
+                        'start_time': segment['start_time'],
+                        'distance': segment['distance'],
+                        'time_diff': segment['time_diff'],
+                        'hr_values': [segment['hr']] if segment['hr'] is not None else []
+                    }
+                else:
+                    # Continue segment
+                    current_segment['distance'] += segment['distance']
+                    current_segment['time_diff'] += segment['time_diff']
+                    if segment['hr'] is not None:
+                        current_segment['hr_values'].append(segment['hr'])
+            
+            elif current_segment is not None:
+                # End segment
+                current_segment['end_time'] = segment['start_time']  # End at start of slow segment
+                
+                # Calculate segment statistics
+                segment_pace = current_segment['time_diff'] / current_segment['distance']
+                segment_hr = (sum(current_segment['hr_values']) / 
+                            len(current_segment['hr_values'])) if current_segment['hr_values'] else 0
+                
+                fast_segments.append({
+                    'start_time': current_segment['start_time'],
+                    'end_time': current_segment['end_time'],
+                    'distance': current_segment['distance'],
+                    'pace': segment_pace,
+                    'avg_hr': segment_hr
+                })
+                
+                current_segment = None
+        
         # Handle last segment if still open
-        if current_segment is not None and current_segment['distance'] >= 0.1:
-            current_segment['end_time'] = prev_point['time'].isoformat()
+        if current_segment is not None:
+            current_segment['end_time'] = point_segments[-1]['end_time']
             segment_pace = current_segment['time_diff'] / current_segment['distance']
             segment_hr = (sum(current_segment['hr_values']) / 
                         len(current_segment['hr_values'])) if current_segment['hr_values'] else 0
