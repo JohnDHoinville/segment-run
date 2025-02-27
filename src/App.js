@@ -72,14 +72,21 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
   const { isDarkMode, setIsDarkMode } = useContext(ThemeContext);
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
-  const [editAge, setEditAge] = useState(age);
-  const [editRestingHR, setEditRestingHR] = useState(restingHR);
+  const [editAge, setEditAge] = useState(age || '');
+  const [editRestingHR, setEditRestingHR] = useState(restingHR || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const menuRef = useRef(null);
   const API_URL = 'http://localhost:5001';
+
+  // Update local state when props change
+  useEffect(() => {
+    setEditAge(age || '');
+    setEditRestingHR(restingHR || '');
+  }, [age, restingHR]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -95,6 +102,9 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
 
   const handleSave = async () => {
     try {
+      setError('');
+      setSuccessMessage('');
+      
       const response = await fetch(`${API_URL}/profile`, {
         method: 'POST',
         headers: {
@@ -109,25 +119,26 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
 
       if (response.ok) {
         onSave(editAge, editRestingHR);
-        setIsOpen(false);
+        setSuccessMessage('Profile updated successfully');
       } else {
         const error = await response.json();
-        console.error('Failed to save profile:', error);
-        alert('Failed to save profile. Please try again.');
+        setError(error.message || 'Failed to save profile');
       }
     } catch (error) {
-      console.error('Error saving profile:', error);
-      alert('Error saving profile. Please try again.');
+      setError('Error saving profile. Please try again.');
     }
   };
 
   const handleChangePassword = async () => {
-    if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
-      return;
-    }
-
     try {
+      setError('');
+      setSuccessMessage('');
+
+      if (newPassword !== confirmPassword) {
+        setError('New passwords do not match');
+        return;
+      }
+
       const response = await fetch(`${API_URL}/auth/change-password`, {
         method: 'POST',
         headers: {
@@ -144,8 +155,7 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
-        setError('');
-        alert('Password updated successfully');
+        setSuccessMessage('Password updated successfully');
       } else {
         const error = await response.json();
         setError(error.message || 'Failed to update password');
@@ -158,7 +168,7 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
   return (
     <div className="profile-menu" ref={menuRef}>
       <div className="user-menu">
-        <span className="username">{username}</span>
+        <span className="username">👤 {username}</span>
         <button 
           className="hamburger-button"
           onClick={() => setIsOpen(!isOpen)}
@@ -171,7 +181,7 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
       {isOpen && (
         <div className="profile-dropdown">
           <div className="profile-header">
-            <h3>👤 {username}</h3>
+            <h3>Profile Settings</h3>
             <button 
               className="close-button"
               onClick={() => setIsOpen(false)}
@@ -196,7 +206,8 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
             </button>
           </div>
 
-          {error && <div className="error-message">{error}</div>}
+          {error && <div className="profile-error">{error}</div>}
+          {successMessage && <div className="profile-success">{successMessage}</div>}
 
           {activeTab === 'profile' ? (
             <div className="profile-content">
@@ -209,8 +220,20 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
                 </button>
               </div>
+
+              <div className="profile-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Current Age</span>
+                  <span className="stat-value">{age || 'Not set'}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Current Resting HR</span>
+                  <span className="stat-value">{restingHR || 'Not set'} {restingHR && 'bpm'}</span>
+                </div>
+              </div>
+
               <div className="form-group">
-                <label htmlFor="profileAge">Age:</label>
+                <label htmlFor="profileAge">Update Age:</label>
                 <input
                   type="number"
                   id="profileAge"
@@ -218,10 +241,12 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   onChange={(e) => setEditAge(e.target.value)}
                   min="0"
                   max="120"
+                  placeholder="Enter your age"
                 />
               </div>
+
               <div className="form-group">
-                <label htmlFor="profileRestingHR">Resting Heart Rate (bpm):</label>
+                <label htmlFor="profileRestingHR">Update Resting Heart Rate (bpm):</label>
                 <input
                   type="number"
                   id="profileRestingHR"
@@ -229,9 +254,13 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   onChange={(e) => setEditRestingHR(e.target.value)}
                   min="30"
                   max="200"
+                  placeholder="Enter resting heart rate"
                 />
               </div>
-              <button onClick={handleSave} className="save-button">Save Profile</button>
+
+              <button onClick={handleSave} className="save-button">
+                Save Changes
+              </button>
             </div>
           ) : (
             <div className="security-content">
@@ -242,8 +271,10 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   id="currentPassword"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
                 />
               </div>
+
               <div className="form-group">
                 <label htmlFor="newPassword">New Password:</label>
                 <input
@@ -251,8 +282,10 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   id="newPassword"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
                 />
               </div>
+
               <div className="form-group">
                 <label htmlFor="confirmPassword">Confirm New Password:</label>
                 <input
@@ -260,15 +293,19 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   id="confirmPassword"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
                 />
               </div>
-              <button onClick={handleChangePassword} className="save-button">Change Password</button>
+
+              <button onClick={handleChangePassword} className="save-button">
+                Update Password
+              </button>
             </div>
           )}
 
           <div className="profile-footer">
             <button onClick={onLogout} className="logout-button">
-              Logout
+              Sign Out
             </button>
           </div>
         </div>
@@ -291,8 +328,6 @@ const LoginForm = ({ onLogin }) => {
 
     try {
       const endpoint = isRegistering ? '/auth/register' : '/auth/login';
-      console.log('Attempting to fetch:', `${API_URL}${endpoint}`);
-      
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -306,7 +341,6 @@ const LoginForm = ({ onLogin }) => {
         })
       });
 
-      console.log('Response received:', response.status);
       const data = await response.json();
 
       if (response.ok) {
@@ -315,48 +349,65 @@ const LoginForm = ({ onLogin }) => {
         setError(data.error || 'Authentication failed');
       }
     } catch (error) {
-      console.error('Login error details:', error);
-      setError('Network error. Please check if the server is running.');
+      console.error('Login error:', error);
+      setError('Failed to connect to server');
     }
   };
 
   return (
     <div className="login-container">
-      <h2>{isRegistering ? 'Register' : 'Login'}</h2>
-      {error && <div className="error-message">{error}</div>}
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="username">Username:</label>
-          <input
-            type="text"
-            id="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="password">Password:</label>
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
-        <div className="form-actions">
-          <button type="submit">
-            {isRegistering ? 'Register' : 'Login'}
+      <div className="login-box">
+        <h2>{isRegistering ? 'Create Account' : 'Welcome Back'}</h2>
+        <p className="login-subtitle">
+          {isRegistering 
+            ? 'Create an account to start analyzing your runs' 
+            : 'Sign in to access your running analytics'}
+        </p>
+        
+        {error && <div className="login-error">{error}</div>}
+        
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="form-group">
+            <label htmlFor="username">Username</label>
+            <input
+              type="text"
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoFocus
+              placeholder="Enter your username"
+            />
+          </div>
+          
+          <div className="form-group">
+            <label htmlFor="password">Password</label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Enter your password"
+            />
+          </div>
+          
+          <button type="submit" className="login-button">
+            {isRegistering ? 'Create Account' : 'Sign In'}
           </button>
+        </form>
+        
+        <div className="login-footer">
           <button 
-            type="button"
             onClick={() => setIsRegistering(!isRegistering)}
+            className="toggle-auth-button"
           >
-            {isRegistering ? 'Switch to Login' : 'Switch to Register'}
+            {isRegistering 
+              ? 'Already have an account? Sign In' 
+              : 'Need an account? Create one'}
           </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 };
