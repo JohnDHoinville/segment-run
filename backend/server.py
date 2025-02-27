@@ -84,55 +84,25 @@ def analyze():
         try:
             # Analyze the file
             results = analyze_run_file(temp_path, pace_limit, age, resting_hr)
+            if not results:
+                return jsonify({'error': 'Failed to analyze run data'}), 500
+                
+            return jsonify(results)
+            
+        except Exception as e:
+            print(f"Analysis error: {str(e)}")
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+            
         finally:
             # Clean up temp file
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-        
-        # Calculate average pace
-        total_time = 0
-        for segment in results['fast_segments'] + results['slow_segments']:
-            if isinstance(segment, dict) and 'time_diff' in segment:
-                total_time += segment['time_diff']
-        
-        # Format run data for database
-        run_data = {
-            'date': run_date,
-            'total_distance': results['total_distance'],
-            'avg_pace': total_time / results['total_distance'] if results['total_distance'] > 0 else 0,
-            'avg_hr_all': results['avg_hr_all'],
-            'data': results  # Store the entire results object
-        }
-        
-        print(f"User ID from session: {session['user_id']}")  # Debug print
-        print("Attempting to save run...")  # Debug print
-        
-        # Save run to database with user_id
-        try:
-            db.save_run(session['user_id'], run_data)
-            print("Run saved successfully")
-            results['saved'] = True
-            results['save_message'] = 'Run saved successfully'
-        except Exception as e:
-            print(f"Error saving run: {str(e)}")
-            results['saved'] = False
-            results['save_message'] = 'Error saving run'
-            
-        # Get recent runs for comparison
-        recent_runs = db.get_recent_runs(session['user_id'])
-        
-        # Add pace zones
-        results['pace_zones'] = calculate_pace_zones(recent_runs)
-        
-        # Add elevation analysis
-        results['elevation_impact'] = analyze_elevation_impact(results['route_data'])
-        
-        return jsonify(results)
-        
+                
     except Exception as e:
-        print(f"Analysis error: {str(e)}")
+        print(f"Server error: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e), 'saved': False}), 500
+        return jsonify({'error': 'Server error processing request'}), 500
 
 @app.route('/runs', methods=['GET'])
 @login_required

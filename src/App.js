@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext, useEffect, useRef } from 'react';
+import React, { useState, createContext, useContext, useEffect, useRef, useMemo } from 'react';
 import './App.css';
 import LoadingSpinner from './components/LoadingSpinner';
 import { Bar, Line } from 'react-chartjs-2';
@@ -687,10 +687,10 @@ function App() {
   const API_URL = 'http://localhost:5001';
 
   const [selectedFile, setSelectedFile] = useState(null);
-  const [paceLimit, setPaceLimit] = useState('');
+  const [paceLimit, setPaceLimit] = useState(10.0);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
   const [runDate, setRunDate] = useState(null);
   const [age, setAge] = useState('');
   const [restingHR, setRestingHR] = useState('');
@@ -785,12 +785,13 @@ function App() {
     setRestingHR(newRestingHR.toString());
   };
 
-  const handleFileSelect = (event) => {
-    setSelectedFile(event.target.files[0]);
-    setError(null);
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    setSelectedFile(file);
+    setError('');
     
     // Extract date from filename
-    const filename = event.target.files[0].name;
+    const filename = file.name;
     const dateMatch = filename.match(/\d{4}-\d{2}-\d{2}/);
     if (dateMatch) {
       const date = new Date(dateMatch[0]);
@@ -815,38 +816,34 @@ function App() {
     }
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setLoading(true);
-    setSaveStatus('');
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('paceLimit', paceLimit);
-    formData.append('age', age);
-    formData.append('restingHR', restingHR);
-
+  const handleAnalyzeRun = async (file, paceLimit) => {
     try {
-      console.log('Sending request to:', `${API_URL}/analyze`);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('paceLimit', paceLimit);
+      formData.append('age', age || '');
+      formData.append('restingHR', restingHR || '');
+
       const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         credentials: 'include',
         body: formData
       });
 
-      if (response.status === 401) {
-        console.log('Session expired or invalid. Redirecting to login...');
-        setError('Please log in to analyze runs');
-        setLoading(false);
-        return;
-      }
-
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error('Failed to analyze run');
       }
 
       const data = await response.json();
-      console.log('Received data:', data);
+      console.log('Route Analysis:', data);
+      console.log('Map center:', data.route_data?.[0]?.coordinates?.[0]);
+      
+      // Validate route data
+      if (!data.route_data || !Array.isArray(data.route_data)) {
+        console.error('Invalid route data format');
+        return;
+      }
+
       setResults(data);
       if (data.saved) {
         setSaveStatus('Run saved successfully');
@@ -854,7 +851,27 @@ function App() {
         fetchRunHistory();
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error analyzing run:', error);
+      alert('Failed to analyze run. Please try again.');
+    }
+  };
+
+  // Add this function to handle form submission
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setSaveStatus('');
+
+    if (!selectedFile) {
+      setError('Please select a file');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await handleAnalyzeRun(selectedFile, paceLimit);
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
       setError('Failed to analyze run. Please try again.');
     } finally {
       setLoading(false);
@@ -1044,173 +1061,63 @@ function App() {
   };
 
   // Add this new component
-  const RouteMap = ({ segments }) => {
-    const [activeLayers, setActiveLayers] = useState({
-      pace: true,
-      elevation: true,
-      heartRate: true
-    });
-
-    if (!segments || !segments.route_data) {
-      console.log('Missing required data:', { segments });
-      return null;
-    }
-
-    // Debug logging
-    const paceLimit = Number(segments.pace_limit);
-    console.log('Route Analysis:', {
-      pace_limit: paceLimit,
-      total_points: segments.route_data.length,
-      first_point: segments.route_data[0]?.start_point
-    });
-
-    // Create lines based on pace threshold
-    const lines = [];
-    let currentLine = {
-      positions: [],
-      type: 'slow',  // Start with slow
-      pace: 0,
-      avgHR: 0,
-      elevation: 0,
-      hrCount: 0,
-      pointCount: 0
-    };
-
-    // Ensure we have valid coordinates for the first point
-    const firstPoint = segments.route_data[0]?.start_point;
-    const defaultCenter = [42.528866, -83.281525];  // Default center
-    const center = firstPoint && !isNaN(firstPoint.lat) && !isNaN(firstPoint.lon) ? 
-      [Number(firstPoint.lat), Number(firstPoint.lon)] : 
-      defaultCenter;
-
-    console.log('Map center:', center);
-
-    segments.route_data.forEach((point, index) => {
-      // Get coordinates from start_point
-      const lat = Number(point.start_point?.lat);
-      const lon = Number(point.start_point?.lon);
-      if (isNaN(lat) || isNaN(lon)) {
-        console.log('Invalid coordinates:', point.start_point);
-        return;  // Skip this point
-      }
-
-      const pointPace = Number(point.pace);
-      const isFast = !isNaN(pointPace) && !isNaN(paceLimit) && pointPace <= paceLimit;
-
-      // Start first line
-      if (index === 0) {
-        currentLine.type = isFast ? 'fast' : 'slow';
-      }
-
-      // Check if pace type changed
-      if ((isFast && currentLine.type === 'slow') || (!isFast && currentLine.type === 'fast')) {
-        // End current line
-        if (currentLine.positions.length > 0) {
-          currentLine.pace = currentLine.pointCount > 0 ? currentLine.pace / currentLine.pointCount : 0;
-          currentLine.avgHR = currentLine.hrCount > 0 ? currentLine.avgHR / currentLine.hrCount : 0;
-          currentLine.elevation = currentLine.pointCount > 0 ? currentLine.elevation / currentLine.pointCount : 0;
-          lines.push({...currentLine});
+  const RouteMap = ({ routeData, fastSegments, slowSegments }) => {
+    // Set a default center (we'll update it when we have data)
+    const [center, setCenter] = useState([42.5, -83.2]); // Default to Michigan area
+    
+    useEffect(() => {
+      // Calculate center from first valid segment
+      if (routeData && routeData.length > 0) {
+        const firstSegment = routeData[0];
+        if (firstSegment.coordinates && firstSegment.coordinates.length > 0) {
+          // Use the first coordinate of the first segment
+          setCenter(firstSegment.coordinates[0]);
+          console.log('Setting map center to:', firstSegment.coordinates[0]);
         }
-        // Start new line
-        currentLine = {
-          positions: [[lat, lon]],
-          type: isFast ? 'fast' : 'slow',
-          pace: pointPace || 0,
-          avgHR: point.hr || 0,
-          elevation: point.elevation || 0,
-          hrCount: point.hr ? 1 : 0,
-          pointCount: 1
-        };
-      } else {
-        // Continue current line
-        currentLine.positions.push([lat, lon]);
-        currentLine.pace += pointPace || 0;
-        currentLine.avgHR += point.hr || 0;
-        currentLine.elevation += point.elevation || 0;
-        if (point.hr) currentLine.hrCount++;
-        currentLine.pointCount++;
       }
-    });
+    }, [routeData]);
 
-    // Add the last line
-    if (currentLine.positions.length > 0) {
-      currentLine.pace = currentLine.pointCount > 0 ? currentLine.pace / currentLine.pointCount : 0;
-      currentLine.avgHR = currentLine.hrCount > 0 ? currentLine.avgHR / currentLine.hrCount : 0;
-      currentLine.elevation = currentLine.pointCount > 0 ? currentLine.elevation / currentLine.pointCount : 0;
-      lines.push({...currentLine});
-    }
+    // Process segments for display
+    const processedSegments = useMemo(() => {
+      if (!routeData || !routeData.length) return { line_types: [], sample_positions: [], total_lines: 0 };
 
-    console.log('Line segments:', {
-      total_lines: lines.length,
-      line_types: lines.map(l => l.type),
-      sample_positions: lines[0]?.positions.slice(0, 2)
-    });
+      return {
+        line_types: routeData.map(segment => ({
+          type: segment.type,
+          coordinates: segment.coordinates
+        })),
+        sample_positions: routeData.map(segment => segment.coordinates),
+        total_lines: routeData.length
+      };
+    }, [routeData]);
 
     return (
-      <div className="map-container">
-        <div className="map-controls">
-          <div className="layer-toggles">
-            <label>
-              <input
-                type="checkbox"
-                checked={activeLayers.pace}
-                onChange={(e) => setActiveLayers({...activeLayers, pace: e.target.checked})}
-              />
-              Pace
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={activeLayers.elevation}
-                onChange={(e) => setActiveLayers({...activeLayers, elevation: e.target.checked})}
-              />
-              Elevation
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={activeLayers.heartRate}
-                onChange={(e) => setActiveLayers({...activeLayers, heartRate: e.target.checked})}
-              />
-              Heart Rate
-            </label>
-          </div>
-        </div>
-        
-        <MapContainer center={center} zoom={14} style={{ height: '400px', width: '100%' }}>
+      <div className="route-map">
+        <MapContainer 
+          center={center} 
+          zoom={15} 
+          style={{ height: '400px', width: '100%' }}
+          key={`${center[0]}-${center[1]}`} // Force re-render when center changes
+        >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
-          {activeLayers.pace && lines.map((line, index) => (
+          {processedSegments.line_types.map((segment, index) => (
             <Polyline
               key={index}
-              positions={line.positions}
+              positions={segment.coordinates}
               pathOptions={{
-                color: line.type === 'fast' ? 'var(--fast-color)' : 'var(--slow-color)',
-                weight: 4
+                color: segment.type === 'fast' ? '#4CAF50' : '#FF5252',
+                weight: 3
               }}
             >
-              <MapTooltip sticky>
-                <div>
-                  <strong>Pace:</strong> {line.pace ? line.pace.toFixed(2) : 'N/A'} min/mile
-                  {activeLayers.heartRate && <div><strong>HR:</strong> {line.avgHR ? Math.round(line.avgHR) : 'N/A'} bpm</div>}
-                  {activeLayers.elevation && <div><strong>Elevation:</strong> {line.elevation ? line.elevation.toFixed(0) : 'N/A'} ft</div>}
-                </div>
+              <MapTooltip>
+                {`${segment.type.charAt(0).toUpperCase() + segment.type.slice(1)} Segment`}
               </MapTooltip>
             </Polyline>
           ))}
         </MapContainer>
-        <div className="map-legend">
-          <div className="legend-item">
-            <div className="legend-color legend-fast"></div>
-            <span>Fast Pace (≤ {segments.pace_limit} min/mile)</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-color legend-slow"></div>
-            <span>Slow Pace ({'>'}  {segments.pace_limit} min/mile)</span>
-          </div>
-        </div>
       </div>
     );
   };
@@ -1714,16 +1621,18 @@ function App() {
                   <div className="form-group file-input-group">
                     <label htmlFor="file">
                       <div className="file-upload-box">
-                        <i className="upload-icon">📁</i>
-                        <span>{selectedFile ? selectedFile.name : 'Choose GPX File'}</span>
+                        <span className="upload-icon">📁</span>
+                        <span className="upload-text">
+                          {selectedFile ? selectedFile.name : 'Choose GPX file'}
+                        </span>
                       </div>
                     </label>
                     <input
                       type="file"
                       id="file"
                       accept=".gpx"
-                      onChange={handleFileSelect}
-                      className="hidden"
+                      onChange={handleFileChange}
+                      style={{ display: 'none' }}
                     />
                   </div>
                   
@@ -1733,48 +1642,15 @@ function App() {
                       type="number"
                       id="paceLimit"
                       value={paceLimit}
-                      onChange={(e) => setPaceLimit(e.target.value)}
+                      onChange={(e) => setPaceLimit(parseFloat(e.target.value))}
                       step="0.1"
-                      min="0"
-                      placeholder="Enter target pace"
-                      className="pace-input"
+                      min="4"
+                      max="20"
                     />
                   </div>
                   
-                  <div className="form-group">
-                    <label htmlFor="age">Age (for HR zones):</label>
-                    <input
-                      type="number"
-                      id="age"
-                      value={age}
-                      onChange={(e) => setAge(e.target.value)}
-                      min="0"
-                      max="120"
-                      placeholder="Enter your age"
-                      className="age-input"
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label htmlFor="restingHR">Resting Heart Rate (bpm):</label>
-                    <input
-                      type="number"
-                      id="restingHR"
-                      value={restingHR}
-                      onChange={(e) => setRestingHR(e.target.value)}
-                      min="30"
-                      max="200"
-                      placeholder="Enter resting heart rate"
-                      className="hr-input"
-                    />
-                  </div>
-                  
-                  <button 
-                    type="submit" 
-                    disabled={loading || !selectedFile || !paceLimit}
-                    className={`submit-button ${loading ? 'loading' : ''}`}
-                  >
-                    {loading ? 'Analyzing...' : 'Analyze Run'}
+                  <button type="submit" disabled={loading || !selectedFile}>
+                    {loading ? <LoadingSpinner /> : 'Analyze Run'}
                   </button>
                 </form>
               </div>
@@ -1845,7 +1721,7 @@ function App() {
                     )}
 
                     <h3>Route Map</h3>
-                    <RouteMap segments={results} />
+                    <RouteMap routeData={results.route_data} fastSegments={results.fast_segments} slowSegments={results.slow_segments} />
                     
                     <h3>Segment Analysis</h3>
                     <div className="chart-container">
