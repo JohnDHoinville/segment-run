@@ -3,6 +3,7 @@ import React, { useState, createContext, useContext, useEffect, useRef, useMemo 
 import './App.css';
 import LoadingSpinner from './components/LoadingSpinner';
 import LoginForm from './components/LoginForm';
+import TrainingZones from './components/TrainingZones';
 import { API_URL } from './config';
 import { Bar, Line } from 'react-chartjs-2';
 import {
@@ -867,6 +868,7 @@ function App() {
 
       const results = await response.json();
       console.log('Analysis results:', results);
+      console.log('Training zones:', results.data?.training_zones);
       setResults(results.data);  // Extract the data from the response
       setSaveStatus(results.saved ? 'Run saved successfully!' : 'Run analyzed but not saved');
     } catch (error) {
@@ -1119,44 +1121,6 @@ function App() {
             </Polyline>
           ))}
         </MapContainer>
-      </div>
-    );
-  };
-
-  const TrainingZones = ({ zones }) => {
-    if (!zones) return null;
-
-    return (
-      <div className="training-zones">
-        <h3>Heart Rate Training Zones</h3>
-        <div className="zones-container">
-          {Object.entries(zones).map(([zone, data]) => (
-            <div key={zone} className="zone-item" style={{ borderLeft: `4px solid ${data.color}` }}>
-              <div className="zone-header">
-                <h4>{zone} - {data.name}</h4>
-                <span className="zone-range">
-                  {data.range[0]}-{data.range[1]} bpm
-                </span>
-              </div>
-              <div className="zone-stats">
-                <div className="zone-percentage">
-                  {data.percentage.toFixed(1)}%
-                  <div 
-                    className="percentage-bar" 
-                    style={{ 
-                      width: `${data.percentage}%`,
-                      backgroundColor: data.color 
-                    }} 
-                  />
-                </div>
-                <div className="zone-time">
-                  {Math.floor(data.time / 60)}:{(data.time % 60).toString().padStart(2, '0')}
-                </div>
-              </div>
-              <p className="zone-description">{data.description}</p>
-            </div>
-          ))}
-        </div>
       </div>
     );
   };
@@ -1720,7 +1684,11 @@ function App() {
             </div>
 
             <div className="segments">
+              {console.log("Results object:", results)}
+              {console.log("Training zones:", results?.training_zones)}
+              
               {results?.training_zones && (
+                console.log("Attempting to render training zones") ||
                 <TrainingZones zones={results.training_zones} />
               )}
 

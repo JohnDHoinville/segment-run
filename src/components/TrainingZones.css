@@ -1,0 +1,86 @@
+.training-zones {
+  margin: 20px 0;
+  padding: 20px;
+  background: var(--background-secondary);
+  border-radius: 10px;
+}
+
+.zone-card {
+  margin: 10px 0;
+  padding: 15px 20px;
+  background: var(--background-primary);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.zone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.zone-header h4 {
+  margin: 0 0 10px 0;
+  font-size: 1.1em;
+}
+
+.zone-range {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+
+.zone-ranges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.zone-range.hrr {
+  color: var(--text-secondary);
+}
+
+.zone-range.bpm {
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.zone-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.zone-percentage {
+  flex-grow: 1;
+  margin-right: 20px;
+  position: relative;
+  height: 20px;
+  background: var(--background-secondary);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.percentage-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  transition: width 0.3s ease;
+  opacity: 0.7;
+}
+
+.zone-time {
+  font-size: 1em;
+  font-weight: bold;
+  min-width: 60px;
+  text-align: right;
+}
+
+.zone-description {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  margin: 5px 0;
+} 
