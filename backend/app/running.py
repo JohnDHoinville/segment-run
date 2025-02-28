@@ -64,10 +64,13 @@ def parse_time(time_str):
 # Function to parse GPX data and calculate distance under specified pace
 def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
     try:
-        print(f"Attempting to read file: {file_path}")
-        print(f"Parameters: pace_limit={pace_limit}, age={user_age}, resting_hr={resting_hr}")
+        print(f"\nStarting analysis of {file_path}")
+        print(f"Pace limit: {pace_limit} min/mile")
+        
         tree = ET.parse(file_path)
         root = tree.getroot()
+        
+        print("Successfully parsed GPX file")
         
         ns = {
             'gpx': 'http://www.topografix.com/GPX/1/1',
@@ -99,12 +102,15 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
         trkpt_list = root.findall('.//gpx:trkpt', ns)
         print(f"Found {len(trkpt_list)} trackpoints")
         
-        prev_point = None
+        if not trkpt_list:
+            print("No trackpoints found in GPX file")
+            raise Exception("No trackpoints found in GPX file")
         
         # Add this to track all heart rates
         all_heart_rates = []  # Track all heart rates for the entire run
         
         # First pass: Process all points and create basic segments
+        prev_point = None
         for trkpt in trkpt_list:
             try:
                 lat = float(trkpt.get('lat'))
@@ -227,10 +233,10 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
         avg_hr_all = sum(all_heart_rates) / len(all_heart_rates) if all_heart_rates else 0
         
         # Debug output
-        print(f"\nAnalysis Summary:")
-        print(f"Total Distance: {total_distance_all:.2f} miles")
-        print(f"Fast Distance: {total_fast_distance:.2f} miles")
-        print(f"Slow Distance: {total_slow_distance:.2f} miles")
+        print(f"\nAnalysis complete:")
+        print(f"Total distance: {total_distance_all:.2f} miles")
+        print(f"Fast distance: {total_fast_distance:.2f} miles")
+        print(f"Slow distance: {total_slow_distance:.2f} miles")
         print(f"Average HR (All): {avg_hr_all:.0f} bpm")
         print(f"Average HR (Fast): {avg_hr_fast:.0f} bpm")
         print(f"Average HR (Slow): {avg_hr_slow:.0f} bpm")
@@ -244,8 +250,8 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
                     'coordinates': segment['coordinates'],
                     'pace': segment['pace'],
                     'distance': segment['distance'],
-                    'start_time': segment['start_time'].strftime('%Y-%m-%d %H:%M:%S'),
-                    'end_time': segment['end_time'].strftime('%Y-%m-%d %H:%M:%S')
+                    'start_time': segment['start_time'],
+                    'end_time': segment['end_time']
                 }
                 route_data.append(segment_data)
 
@@ -269,13 +275,17 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
             'fast_segments': fast_segments,
             'slow_segments': slow_segments,
             'route_data': route_data,
-            'pace_limit': float(pace_limit),
+            'elevation_data': elevation_data,
+            'mile_splits': mile_splits,
             'training_zones': calculate_training_zones(all_heart_rates, user_age, resting_hr),
-            'pace_recommendations': get_pace_recommendations([s['pace'] for s in fast_segments if s['pace'] != float('inf')])
+            'pace_recommendations': get_pace_recommendations([s['pace'] for s in fast_segments if s['pace'] != float('inf')]),
+            'pace_limit': float(pace_limit)
         }
         
     except Exception as e:
-        print(f"Error processing file: {str(e)}")
+        print(f"\nError in analyze_run_file:")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
         traceback.print_exc()
         raise Exception(f"Failed to analyze run: {str(e)}")
 

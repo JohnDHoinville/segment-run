@@ -11,11 +11,22 @@ import re
 from functools import wraps
 import secrets
 import traceback
+from json import JSONEncoder
+
+# Use the custom encoder for all JSON responses
+class DateTimeEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
+        return super().default(obj)
 
 # Load environment variables
 load_dotenv('.flaskenv')
 
 app = Flask(__name__)
+
+# Use the custom encoder for all JSON responses
+app.json_encoder = DateTimeEncoder
 
 # Configure session
 app.config.update(
@@ -67,14 +78,25 @@ def home():
 def analyze():
     try:
         if 'file' not in request.files:
+            print("No file in request")
             return jsonify({'error': 'No file uploaded'}), 400
             
         file = request.files['file']
+        print(f"\nFile details:")
+        print(f"Filename: {file.filename}")
+        print(f"Content type: {file.content_type}")
+        print(f"File size: {len(file.read())} bytes")
+        file.seek(0)  # Reset file pointer after reading
+        
         pace_limit = float(request.form.get('paceLimit', 0))
         age = int(request.form.get('age', 0))
         resting_hr = int(request.form.get('restingHR', 0))
         
+        print(f"\nAnalyzing file: {file.filename}")
+        print(f"Parameters: pace_limit={pace_limit}, age={age}, resting_hr={resting_hr}")
+        
         if not file or not file.filename.endswith('.gpx'):
+            print("Invalid file format")
             return jsonify({'error': 'Invalid file format'}), 400
             
         # Extract date from filename
@@ -85,16 +107,53 @@ def analyze():
         temp_path = 'temp.gpx'
         file.save(temp_path)
         
+        # Verify file was saved
+        if not os.path.exists(temp_path):
+            print("Failed to save temporary file")
+            return jsonify({'error': 'Failed to save uploaded file'}), 500
+            
+        print(f"Saved file temporarily to {temp_path}")
+        print(f"File size on disk: {os.path.getsize(temp_path)} bytes")
+        
         try:
             # Analyze the file
-            results = analyze_run_file(temp_path, pace_limit, age, resting_hr)
-            if not results:
+            analysis_result = analyze_run_file(temp_path, pace_limit)
+            print("\nAnalysis completed successfully")
+            print("Analysis result:", json.dumps(analysis_result, indent=2, cls=DateTimeEncoder))
+            
+            # Debug: Print key values
+            print("\nKey values from analysis:")
+            print(f"Total distance: {analysis_result.get('total_distance', 0)}")
+            print(f"Fast distance: {analysis_result.get('fast_distance', 0)}")
+            print(f"Slow distance: {analysis_result.get('slow_distance', 0)}")
+            print(f"Number of fast segments: {len(analysis_result.get('fast_segments', []))}")
+            print(f"Number of slow segments: {len(analysis_result.get('slow_segments', []))}")
+            
+            if not analysis_result:
+                print("Analysis returned no results")
                 return jsonify({'error': 'Failed to analyze run data'}), 500
                 
-            return jsonify(results)
+            # Prepare run data for saving
+            run_data = {
+                'date': request.form.get('date', datetime.now().strftime('%Y-%m-%d')),
+                'data': analysis_result
+            }
+            
+            print("\nAttempting to save run data")
+            run_id = db.save_run(session['user_id'], run_data)
+            print(f"Run saved successfully with ID: {run_id}")
+            
+            return jsonify({
+                'message': 'Analysis complete',
+                'data': analysis_result,
+                'run_id': run_id,
+                'saved': True
+            })
             
         except Exception as e:
-            print(f"Analysis error: {str(e)}")
+            print(f"\nError during analysis or save:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
             
@@ -102,6 +161,7 @@ def analyze():
             # Clean up temp file
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+                print(f"Cleaned up temporary file: {temp_path}")
                 
     except Exception as e:
         print(f"Server error: {str(e)}")
@@ -113,46 +173,42 @@ def analyze():
 def get_runs():
     try:
         print("Fetching runs for user:", session['user_id'])
+        print("Session data:", dict(session))
         runs = db.get_all_runs(session['user_id'])
-        print(f"Found {len(runs)} runs for user")
+        print(f"Raw runs from database:", runs)
         
         # Format runs for frontend
         formatted_runs = []
         for run in runs:
-            print(f"Processing run: {run}")
             try:
-                run_data = json.loads(run['data'])  # Parse stored JSON data
+                # Ensure data is parsed JSON
+                run_data = run['data']
+                print(f"Processing run {run['id']}, data type:", type(run_data))
+                if isinstance(run_data, str):
+                    run_data = json.loads(run_data)
                 
-                # Calculate total time for average pace
-                total_time = 0
-                for segment in run_data['fast_segments'] + run_data['slow_segments']:
-                    if isinstance(segment, dict) and 'time_diff' in segment:
-                        total_time += segment['time_diff']
-                
-                # Calculate average pace
-                avg_pace = total_time / run_data['total_distance'] if run_data['total_distance'] > 0 else 0
-                
+                # Create formatted run object
                 formatted_run = {
                     'id': run['id'],
                     'date': run['date'],
-                    'distance': run_data['total_distance'],
-                    'avg_pace': avg_pace,  # Use calculated average pace
-                    'avg_hr': run_data.get('avg_hr_all', 0),
-                    'type': 'Training',
-                    'data': run['data']
+                    'data': run_data,
+                    'total_distance': run['total_distance'],
+                    'avg_pace': run['avg_pace'],
+                    'avg_hr': run['avg_hr']
                 }
+                print(f"Formatted run:", formatted_run)
                 formatted_runs.append(formatted_run)
-                print(f"Formatted run: {formatted_run}")
             except Exception as e:
                 print(f"Error formatting run {run['id']}: {str(e)}")
+                traceback.print_exc()
                 continue
-                
+        
         print(f"Returning {len(formatted_runs)} formatted runs")
         return jsonify(formatted_runs)
     except Exception as e:
         print(f"Error getting runs: {str(e)}")
         traceback.print_exc()
-        return jsonify([])
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/compare', methods=['POST'])
 @login_required

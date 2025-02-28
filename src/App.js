@@ -670,6 +670,12 @@ const SuccessMessage = ({ message }) => (
   </div>
 );
 
+// Add this helper function near the top of your file
+const calculateAveragePace = (segments) => {
+  if (!segments || segments.length === 0) return 0;
+  return segments.reduce((sum, segment) => sum + segment.pace, 0) / segments.length;
+};
+
 function App() {
   const API_URL = 'http://localhost:5001';
 
@@ -699,10 +705,11 @@ function App() {
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('Run history data:', data);  // Debug log
         setRunHistory(data);
       }
     } catch (error) {
-      console.error('Error fetching run history:', error);
+      console.error('Error loading run history:', error);
     }
   }, [API_URL]);
 
@@ -833,6 +840,10 @@ function App() {
       return;
     }
 
+    console.log('Uploading file:', selectedFile.name);
+    console.log('File size:', selectedFile.size);
+    console.log('File type:', selectedFile.type);
+
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('paceLimit', paceLimit || 10);
@@ -840,18 +851,23 @@ function App() {
     formData.append('restingHR', restingHR || 0);
 
     try {
+      console.log('Sending request to:', `${API_URL}/analyze`);
       const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         credentials: 'include',
         body: formData
       });
 
+      console.log('Response status:', response.status);
       if (!response.ok) {
-        throw new Error('Failed to analyze run');
+        const errorData = await response.json();
+        console.error('Server error:', errorData);
+        throw new Error(errorData.error || 'Failed to analyze run');
       }
 
       const results = await response.json();
-      setResults(results);
+      console.log('Analysis results:', results);
+      setResults(results.data);  // Extract the data from the response
       setSaveStatus(results.saved ? 'Run saved successfully!' : 'Run analyzed but not saved');
     } catch (error) {
       console.error('Error:', error);
@@ -1315,7 +1331,7 @@ function App() {
                     />
                   </td>
                   <td>{new Date(run.date).toLocaleDateString()}</td>
-                  <td>{safeNumber(run.distance)} mi</td>
+                  <td>{safeNumber(distance)} mi</td>
                   <td>{safeNumber(run.avg_pace, 1)} min/mi</td>
                   <td>{safeNumber(run.avg_hr, 0)} bpm</td>
                   <td>
@@ -1571,6 +1587,11 @@ function App() {
     }
   };
 
+  // Add a helper function for safe number formatting
+  const formatNumber = (value, decimals = 2) => {
+    return (value || 0).toFixed(decimals);
+  };
+
   return (
     <ThemeProvider>
       <TableProvider>
@@ -1656,168 +1677,153 @@ function App() {
             <div className="results-grid">
               <div className="result-item">
                 <h3>Total Distance</h3>
-                <p className="result-value">{results.total_distance.toFixed(2)}</p>
+                <p className="result-value">{formatNumber(results?.total_distance || 0)}</p>
                 <p className="result-unit">miles</p>
-                        <div className="hr-item">
-                          <p className="result-label">Overall Heart Rate</p>
-                          <p className="result-value-secondary">{Math.round(results.avg_hr_all)}</p>
-                          <p className="result-unit">bpm</p>
-                        </div>
+                <div className="hr-item">
+                  <p className="result-label">Overall Heart Rate</p>
+                  <p className="result-value-secondary">{formatNumber(results?.avg_hr_all || 0, 0)}</p>
+                  <p className="result-unit">bpm</p>
+                </div>
               </div>
               
               <div className="result-item">
                 <h3>Fast Distance</h3>
-                <p className="result-value">{results.fast_distance.toFixed(2)}</p>
+                <p className="result-value">{formatNumber(results?.fast_distance || 0)}</p>
                 <p className="result-unit">miles</p>
                 <p className="result-percentage">
-                  ({results.percentage_fast.toFixed(1)}% of total)
+                  ({formatNumber(results?.percentage_fast || 0, 1)}% of total)
                 </p>
-                        <div className="avg-pace">
-                          <p className="result-label">Average Pace</p>
-                          <p className="result-value-secondary">
-                            {formatTime(results.fast_segments.reduce((sum, segment) => sum + segment.pace, 0) / 
-                              results.fast_segments.length)}
-                          </p>
-                          <p className="result-unit">/mile</p>
+                <div className="avg-pace">
+                  <p className="result-label">Average Pace</p>
+                  <p className="result-value-secondary">
+                    {formatTime(calculateAveragePace(results?.fast_segments || []))}
+                  </p>
+                  <p className="result-unit">/mile</p>
+                </div>
               </div>
-                  <div className="hr-item">
-                          <p className="result-label">Average Heart Rate</p>
-                          <p className="result-value-secondary">{Math.round(results.avg_hr_fast)}</p>
-                    <p className="result-unit">bpm</p>
-                  </div>
-                      </div>
 
-                      <div className="result-item">
-                        <h3>Slow Distance</h3>
-                        <p className="result-value">{results.slow_distance.toFixed(2)}</p>
-                        <p className="result-unit">miles</p>
-                        <p className="result-percentage">
-                          ({results.percentage_slow.toFixed(1)}% of total)
-                        </p>
-                        <div className="avg-pace">
-                          <p className="result-label">Average Pace</p>
-                          <p className="result-value-secondary">
-                            {formatTime(results.slow_segments.reduce((sum, segment) => sum + segment.pace, 0) / 
-                              results.slow_segments.length)}
-                          </p>
-                          <p className="result-unit">/mile</p>
-                  </div>
-                  <div className="hr-item">
-                          <p className="result-label">Average Heart Rate</p>
-                          <p className="result-value-secondary">{Math.round(results.avg_hr_slow)}</p>
-                    <p className="result-unit">bpm</p>
+              <div className="result-item">
+                <h3>Slow Distance</h3>
+                <p className="result-value">{formatNumber(results?.slow_distance || 0)}</p>
+                <p className="result-unit">miles</p>
+                <p className="result-percentage">
+                  ({formatNumber(results?.percentage_slow || 0, 1)}% of total)
+                </p>
+                <div className="avg-pace">
+                  <p className="result-label">Average Pace</p>
+                  <p className="result-value-secondary">
+                    {formatTime(calculateAveragePace(results?.slow_segments || []))}
+                  </p>
+                  <p className="result-unit">/mile</p>
                 </div>
               </div>
             </div>
 
-              <div className="segments">
-                      {results && results.training_zones && (
-                        <TrainingZones zones={results.training_zones} />
-                      )}
+            <div className="segments">
+              {results?.training_zones && (
+                <TrainingZones zones={results.training_zones} />
+              )}
 
-                      <h3>Route Map</h3>
-                      <RouteMap routeData={results.route_data} fastSegments={results.fast_segments} slowSegments={results.slow_segments} />
-                      
-                      <h3>Mile Splits</h3>
-                      {console.log('Mile splits data:', results.mile_splits)}
-                      <MileSplits splits={results.mile_splits} />
-                      
-                      <h3>Segment Analysis</h3>
-                      <div className="chart-container">
-                        <Bar data={prepareChartData(results)} options={chartOptions} />
-                      </div>
-                <div className="table-container">
-                        <CollapsibleTable 
-                          title={`Fast Segments (${results.fast_segments.length})`} 
-                          id="fast-segments"
-                        >
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Segment</th>
-                                <th>Start Time</th>
-                                <th>End Time</th>
-                        <th>Distance</th>
-                        <th>Pace</th>
-                                <th>Best Pace</th>
-                        <th>Heart Rate</th>
+              <h3>Route Map</h3>
+              <RouteMap 
+                routeData={results?.route_data || []} 
+                fastSegments={results?.fast_segments || []} 
+                slowSegments={results?.slow_segments || []} 
+              />
+              
+              <h3>Mile Splits</h3>
+              <MileSplits splits={results?.mile_splits || []} />
+              
+              <CollapsibleTable 
+                title={`Fast Segments (${results?.fast_segments?.length || 0})`} 
+                id="fast-segments"
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Segment</th>
+                      <th>Start Time</th>
+                      <th>End Time</th>
+                      <th>Distance</th>
+                      <th>Pace</th>
+                      <th>Best Pace</th>
+                      <th>Heart Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results?.fast_segments?.map((segment, index) => (
+                      <tr key={index}>
+                        <td>{index + 1}</td>
+                        <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
+                        <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
+                        <td>{formatNumber(segment.distance)} mi</td>
+                        <td>{formatTime(segment.pace)} /mi</td>
+                        <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
+                        <td>{formatNumber(segment.avg_hr)} bpm</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {results.fast_segments.map((segment, index) => (
-                        <tr key={index}>
-                          <td>{index + 1}</td>
-                                  <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
-                                  <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
-                          <td>{segment.distance.toFixed(2)} mi</td>
-                                  <td>{formatTime(segment.pace)} /mi</td>
-                                  <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
-                          <td>{Math.round(segment.avg_hr)} bpm</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                        </CollapsibleTable>
+                    ))}
+                  </tbody>
+                </table>
+              </CollapsibleTable>
 
-                        <CollapsibleTable 
-                          title={`Slow Segments (${results.slow_segments.length})`} 
-                          id="slow-segments"
-                        >
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Segment</th>
-                                <th>Start Time</th>
-                                <th>End Time</th>
-                                <th>Distance</th>
-                                <th>Pace</th>
-                                <th>Best Pace</th>
-                                <th>Heart Rate</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {results.slow_segments.map((segment, index) => (
-                                <tr key={index}>
-                                  <td>{index + 1}</td>
-                                  <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
-                                  <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
-                                  <td>{segment.distance.toFixed(2)} mi</td>
-                                  <td>{formatTime(segment.pace)} /mi</td>
-                                  <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
-                                  <td>{Math.round(segment.avg_hr)} bpm</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </CollapsibleTable>
-                </div>
-              </div>
+              <CollapsibleTable 
+                title={`Slow Segments (${results?.slow_segments?.length || 0})`} 
+                id="slow-segments"
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Segment</th>
+                      <th>Start Time</th>
+                      <th>End Time</th>
+                      <th>Distance</th>
+                      <th>Pace</th>
+                      <th>Best Pace</th>
+                      <th>Heart Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results?.slow_segments?.map((segment, index) => (
+                      <tr key={index}>
+                        <td>{index + 1}</td>
+                        <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
+                        <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
+                        <td>{formatNumber(segment.distance)} mi</td>
+                        <td>{formatTime(segment.pace)} /mi</td>
+                        <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
+                        <td>{formatNumber(segment.avg_hr)} bpm</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CollapsibleTable>
+            </div>
 
-                    {results && results.pace_zones && (
-                      <PaceAnalysis 
-                        results={results}
-                        paceZones={results.pace_zones}
-                        elevationImpact={results.elevation_impact}
-                      />
+            {results && results.pace_zones && (
+              <PaceAnalysis 
+                results={results}
+                paceZones={results.pace_zones}
+                elevationImpact={results.elevation_impact}
+              />
             )}
           </div>
         )}
 
-                {/* Move RunHistory outside of any conditional rendering */}
-                <div className="history-section">
-                  {!compareMode ? (
-                    <RunHistory 
-                      runs={runHistory} 
-                      onCompareRuns={handleCompareRuns}
-                      onRunDeleted={handleRunDeleted}
-                    />
-                  ) : (
-                    <RunComparison 
-                      runs={comparedRuns}
-                      onClose={() => setCompareMode(false)}
-                    />
-                  )}
-                </div>
+        {/* Move RunHistory outside of any conditional rendering */}
+        <div className="history-section">
+          {!compareMode ? (
+            <RunHistory 
+              runs={runHistory} 
+              onCompareRuns={handleCompareRuns}
+              onRunDeleted={handleRunDeleted}
+            />
+          ) : (
+            <RunComparison 
+              runs={comparedRuns}
+              onClose={() => setCompareMode(false)}
+            />
+          )}
+        </div>
       </main>
             </>
           )}

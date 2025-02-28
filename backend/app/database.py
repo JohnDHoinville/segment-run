@@ -4,6 +4,13 @@ from datetime import datetime
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
+from json import JSONEncoder
+
+class DateTimeEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
+        return super().default(obj)
 
 class RunDatabase:
     def __init__(self, db_name='runs.db'):
@@ -109,7 +116,7 @@ class RunDatabase:
             # Check for default admin user
             cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',))
             if not cursor.fetchone():
-                password_hash = generate_password_hash('admin123')
+                password_hash = generate_password_hash('admin123', method='sha256')
                 cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
                              ('admin', password_hash))
                 user_id = cursor.lastrowid
@@ -121,17 +128,38 @@ class RunDatabase:
     def save_run(self, user_id, run_data):
         try:
             print("Saving run data for user:", user_id)
+            print("Run data to save:", run_data)
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
                 
                 # Extract values from run_data
                 data_obj = run_data.get('data', {})
-                total_distance = data_obj.get('total_distance')
-                avg_pace = data_obj.get('avg_pace')
-                avg_hr = data_obj.get('avg_hr_all')
+                if isinstance(data_obj, str):
+                    data_obj = json.loads(data_obj)
+                
+                print("Parsed data object:", data_obj)
+                
+                # Calculate total time for average pace
+                total_time = 0
+                for segment in data_obj.get('fast_segments', []) + data_obj.get('slow_segments', []):
+                    if isinstance(segment, dict) and 'time_diff' in segment:
+                        total_time += segment['time_diff']
+                
+                # Calculate average pace
+                total_distance = data_obj.get('total_distance', 0)
+                avg_pace = total_time / total_distance if total_distance > 0 else 0
+                avg_hr = data_obj.get('avg_hr_all', 0)
                 
                 # Convert data to string if it's not already
-                data_str = json.dumps(data_obj) if isinstance(data_obj, dict) else data_obj
+                data_str = json.dumps(data_obj, cls=DateTimeEncoder) if isinstance(data_obj, dict) else data_obj
+                
+                print("Values to insert:", {
+                    'user_id': user_id,
+                    'date': run_data['date'],
+                    'total_distance': total_distance,
+                    'avg_pace': avg_pace,
+                    'avg_hr': avg_hr
+                })
                 
                 cursor.execute('''
                     INSERT INTO runs (
@@ -151,8 +179,9 @@ class RunDatabase:
                     data_str
                 ))
                 conn.commit()
-                print(f"Successfully saved run for user {user_id}")
-                return cursor.lastrowid
+                run_id = cursor.lastrowid
+                print(f"Successfully saved run {run_id} for user {user_id}")
+                return run_id
         except Exception as e:
             print(f"Error saving run: {str(e)}")
             print(f"Run data: {run_data}")
@@ -160,9 +189,15 @@ class RunDatabase:
             raise e
 
     def get_all_runs(self, user_id):
+        print(f"Getting runs for user {user_id} from database")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM runs WHERE user_id = ? ORDER BY date DESC', (user_id,))
+            cursor.execute('''
+                SELECT * FROM runs 
+                WHERE user_id = ? 
+                ORDER BY date DESC, created_at DESC
+            ''', (user_id,))
+            
             # Get column names
             columns = [description[0] for description in cursor.description]
             runs = cursor.fetchall()
@@ -172,7 +207,19 @@ class RunDatabase:
             for run in runs:
                 run_dict = {}
                 for i, column in enumerate(columns):
-                    run_dict[column] = run[i]
+                    value = run[i]
+                    # Handle JSON data field
+                    if column == 'data' and value:
+                        try:
+                            if isinstance(value, str):
+                                value = json.loads(value)
+                        except json.JSONDecodeError:
+                            print(f"Error decoding JSON for run {run[0]}")
+                            value = {}
+                    # Ensure numeric fields have default values
+                    elif column in ['total_distance', 'avg_pace', 'avg_hr']:
+                        value = float(value) if value is not None else 0.0
+                    run_dict[column] = value
                 formatted_runs.append(run_dict)
             
             return formatted_runs
@@ -252,11 +299,10 @@ class RunDatabase:
     def create_user(self, username, password):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
-            password_hash = generate_password_hash(password)
+            password_hash = generate_password_hash(password, method='sha256')
             cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
                           (username, password_hash))
             user_id = cursor.lastrowid
-            # Create initial profile for user
             cursor.execute('INSERT INTO profile (user_id, age, resting_hr) VALUES (?, 0, 0)',
                           (user_id,))
             conn.commit()
