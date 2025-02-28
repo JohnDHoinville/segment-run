@@ -117,9 +117,16 @@ def analyze():
         
         try:
             # Analyze the file
-            analysis_result = analyze_run_file(temp_path, pace_limit)
+            analysis_result = analyze_run_file(
+                temp_path, 
+                pace_limit,
+                user_age=age,
+                resting_hr=resting_hr
+            )
             print("\nAnalysis completed successfully")
-            print("Analysis result:", json.dumps(analysis_result, indent=2, cls=DateTimeEncoder))
+            print("\nTraining zones in result:", 'training_zones' in analysis_result)
+            if 'training_zones' in analysis_result:
+                print("Training zones data:", json.dumps(analysis_result['training_zones'], indent=2))
             
             # Debug: Print key values
             print("\nKey values from analysis:")

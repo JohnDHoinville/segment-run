@@ -263,6 +263,11 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
             print(f"First coordinate: {seg['coordinates'][0]}")
             print(f"Last coordinate: {seg['coordinates'][-1]}")
 
+        # Calculate training zones
+        training_zones = calculate_training_zones(all_heart_rates, user_age, resting_hr)
+        print("\nTraining Zones Result:")
+        print(json.dumps(training_zones, indent=2))
+
         return {
             'total_distance': total_distance_all,
             'fast_distance': total_fast_distance,
@@ -277,7 +282,7 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
             'route_data': route_data,
             'elevation_data': elevation_data,
             'mile_splits': mile_splits,
-            'training_zones': calculate_training_zones(all_heart_rates, user_age, resting_hr),
+            'training_zones': training_zones,
             'pace_recommendations': get_pace_recommendations([s['pace'] for s in fast_segments if s['pace'] != float('inf')]),
             'pace_limit': float(pace_limit)
         }
@@ -416,42 +421,56 @@ def save_run_results(file_path, pace_limit, results):
     
     return run_data
 
-def calculate_training_zones(hr_data, age, resting_hr):
-    """Calculate time spent in each heart rate zone using Heart Rate Reserve method"""
-    if not age or not hr_data or resting_hr is None:
+def calculate_training_zones(heart_rates, user_age, resting_hr):
+    print("\nCalculating training zones:")
+    print(f"Heart rates: {len(heart_rates)} values")
+    print(f"User age: {user_age}")
+    print(f"Resting HR: {resting_hr}")
+    
+    if not heart_rates or not user_age or not resting_hr:
+        print("Missing required data for training zones")
         return None
         
-    max_hr = 208 - (0.7 * age)  # Using Tanaka formula for max HR
-    hrr = max_hr - resting_hr  # Heart Rate Reserve
+    # Calculate max HR using common formula
+    max_hr = 220 - user_age
+    heart_rate_reserve = max_hr - resting_hr
     
-    zones_data = {zone: {
-        'name': info['name'],
-        'count': 0,
-        'time': 0,
-        'description': info['description'],
-        'color': info['color'],
-        'range': (
-            int(resting_hr + (info['range'][0] * hrr)),  # Lower bound using HRR
-            int(resting_hr + (info['range'][1] * hrr))   # Upper bound using HRR
+    print(f"Max HR: {max_hr}")
+    print(f"Heart Rate Reserve: {heart_rate_reserve}")
+    
+    # Initialize zones with time spent
+    zones = TRAINING_ZONES.copy()
+    for zone in zones.values():
+        zone['time_spent'] = 0
+        zone['count'] = 0
+        # Calculate actual heart rate ranges
+        zone['hr_range'] = (
+            int(resting_hr + (zone['range'][0] * heart_rate_reserve)),
+            int(resting_hr + (zone['range'][1] * heart_rate_reserve))
         )
-    } for zone, info in TRAINING_ZONES.items()}
+        print(f"Calculated HR range: {zone['hr_range']} for zone with HRR range {zone['range']}")
     
-    # Count points in each zone
-    for hr in hr_data:
-        if hr:  # Skip None values
-            for zone, data in zones_data.items():
-                if data['range'][0] <= hr <= data['range'][1]:
-                    data['count'] += 1
-                    break
+    # Count time spent in each zone
+    for hr in heart_rates:
+        hrr_percentage = (hr - resting_hr) / heart_rate_reserve
+        
+        for zone_name, zone_data in zones.items():
+            if zone_data['range'][0] <= hrr_percentage <= zone_data['range'][1]:
+                zone_data['time_spent'] += 1  # Assuming 1 second per data point
+                zone_data['count'] += 1
+                break
     
-    total_points = len([hr for hr in hr_data if hr])  # Count only valid HR points
+    # Convert seconds to minutes and calculate percentages
+    total_time = sum(zone['time_spent'] for zone in zones.values())
+    print(f"Total time: {total_time} seconds")
     
-    # Calculate percentages and times
-    for zone_data in zones_data.values():
-        zone_data['percentage'] = (zone_data['count'] / total_points * 100) if total_points > 0 else 0
-        zone_data['time'] = zone_data['count'] * 3  # Assuming 3-second intervals
+    for zone in zones.values():
+        zone['time_spent'] = zone['time_spent'] / 60  # Convert to minutes
+        zone['percentage'] = (zone['count'] / len(heart_rates) * 100) if heart_rates else 0
+        zone.pop('count', None)  # Remove the count field
     
-    return zones_data
+    print("Calculated zones:", zones)
+    return zones
 
 def get_pace_recommendations(recent_paces):
     """Calculate pace zones based on recent performance"""
