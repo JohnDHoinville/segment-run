@@ -40,7 +40,7 @@ class RunDatabase:
                     FOREIGN KEY (user_id) REFERENCES users(id)
                 )
             ''')
-            # Create runs table with user_id
+            # Create runs table with all required columns
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS runs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,29 +120,42 @@ class RunDatabase:
 
     def save_run(self, user_id, run_data):
         try:
-            print("Saving run data for user:", user_id)  # Debug print
+            print("Saving run data for user:", user_id)
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
+                
+                # Extract values from run_data
+                data_obj = run_data.get('data', {})
+                total_distance = data_obj.get('total_distance')
+                avg_pace = data_obj.get('avg_pace')
+                avg_hr = data_obj.get('avg_hr_all')
+                
                 # Convert data to string if it's not already
-                data_str = run_data['data'] if isinstance(run_data['data'], str) else json.dumps(run_data['data'])
+                data_str = json.dumps(data_obj) if isinstance(data_obj, dict) else data_obj
                 
                 cursor.execute('''
-                    INSERT INTO runs (user_id, date, total_distance, avg_pace, avg_hr, data)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO runs (
+                        user_id, 
+                        date, 
+                        total_distance, 
+                        avg_pace, 
+                        avg_hr, 
+                        data
+                    ) VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
                     user_id,
                     run_data['date'],
-                    run_data['total_distance'],
-                    run_data['avg_pace'],
-                    run_data['avg_hr_all'],
+                    total_distance,
+                    avg_pace,
+                    avg_hr,
                     data_str
                 ))
                 conn.commit()
-                print(f"Successfully saved run for user {user_id}")  # Debug print
+                print(f"Successfully saved run for user {user_id}")
                 return cursor.lastrowid
         except Exception as e:
             print(f"Error saving run: {str(e)}")
-            print(f"Run data: {run_data}")  # Debug print
+            print(f"Run data: {run_data}")
             traceback.print_exc()
             raise e
 
