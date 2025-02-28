@@ -1,11 +1,10 @@
 import React from 'react';
-import './LoadingSpinner.css';
 
 function LoadingSpinner() {
   return (
-    <div className="spinner-container">
+    <div className="loading-spinner">
       <div className="spinner"></div>
-      <p>Analyzing run data...</p>
+      <p>Loading...</p>
     </div>
   );
 }

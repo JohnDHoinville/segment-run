@@ -1,15 +1,19 @@
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
+from dotenv import load_dotenv
 import tempfile
 import os
-from running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
-import traceback
-from database import RunDatabase
+from app.database import RunDatabase
+from app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
 import json
 from datetime import datetime
 import re
 from functools import wraps
-import secrets  # Add this import
+import secrets
+import traceback
+
+# Load environment variables
+load_dotenv('.flaskenv')
 
 app = Flask(__name__)
 
@@ -28,10 +32,10 @@ app.secret_key = secrets.token_hex(32)
 CORS(app,
     origins=["http://localhost:3000"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Accept"],
     supports_credentials=True,
     expose_headers=["Content-Type", "Authorization"],
-    allow_credentials=True)  # Add this line
+    allow_credentials=True)
 
 # Add debug logging for session
 @app.before_request
@@ -322,11 +326,31 @@ def change_password():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/auth/check', methods=['GET'])
+def check_auth():
+    try:
+        if 'user_id' in session:
+            return jsonify({
+                'authenticated': True,
+                'user_id': session['user_id']
+            })
+        return jsonify({
+            'authenticated': False,
+            'user_id': None
+        })
+    except Exception as e:
+        print(f"Auth check error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'authenticated': False,
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
     app.run(
         debug=True,
-        host='localhost',  # Change from '0.0.0.0' to 'localhost'
+        host='localhost',
         port=5001,
-        ssl_context=None  # Explicitly disable SSL for local development
+        ssl_context=None
     ) 

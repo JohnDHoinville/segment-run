@@ -1,6 +1,9 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, createContext, useContext, useEffect, useRef, useMemo } from 'react';
 import './App.css';
 import LoadingSpinner from './components/LoadingSpinner';
+import LoginForm from './components/LoginForm';
+import { API_URL } from './config';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -19,7 +22,6 @@ import {
   TileLayer, 
   Polyline,
   Tooltip as MapTooltip,
-  Popup,
   Circle,
   CircleMarker
 } from 'react-leaflet';
@@ -80,7 +82,6 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const menuRef = useRef(null);
-  const API_URL = 'http://localhost:5001';
 
   // Update local state when props change
   useEffect(() => {
@@ -310,104 +311,6 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
-
-// Add LoginForm component after ProfileMenu
-const LoginForm = ({ onLogin }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [error, setError] = useState('');
-  const API_URL = 'http://localhost:5001';
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const endpoint = isRegistering ? '/auth/register' : '/auth/login';
-      const response = await fetch(`${API_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          username: username.trim(),
-          password: password
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onLogin(data.user_id, username);
-      } else {
-        setError(data.error || 'Authentication failed');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      setError('Failed to connect to server');
-    }
-  };
-
-  return (
-    <div className="login-container">
-      <div className="login-box">
-        <h2>{isRegistering ? 'Create Account' : 'Welcome Back'}</h2>
-        <p className="login-subtitle">
-          {isRegistering 
-            ? 'Create an account to start analyzing your runs' 
-            : 'Sign in to access your running analytics'}
-        </p>
-        
-        {error && <div className="login-error">{error}</div>}
-        
-        <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              type="text"
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              autoFocus
-              placeholder="Enter your username"
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="Enter your password"
-            />
-          </div>
-          
-          <button type="submit" className="login-button">
-            {isRegistering ? 'Create Account' : 'Sign In'}
-          </button>
-        </form>
-        
-        <div className="login-footer">
-          <button 
-            onClick={() => setIsRegistering(!isRegistering)}
-            className="toggle-auth-button"
-          >
-            {isRegistering 
-              ? 'Already have an account? Sign In' 
-              : 'Need an account? Create one'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -683,78 +586,155 @@ const comparisonChartOptions = {
   }
 };
 
+// Add this utility function at the top of the file
+const formatTime = (minutes) => {
+  const hours = Math.floor(minutes / 60);
+  const mins = Math.floor(minutes % 60);
+  const secs = Math.round((minutes % 1) * 60);
+  
+  if (hours > 0) {
+    return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+// Add this near the top of the file with other context definitions
+const TableContext = createContext();
+
+// Add this provider component
+const TableProvider = ({ children }) => {
+  const [openTables, setOpenTables] = useState(new Set());
+  
+  return (
+    <TableContext.Provider value={{ openTables, setOpenTables }}>
+      {children}
+    </TableContext.Provider>
+  );
+};
+
+// Update the CollapsibleTable component to use the context
+const CollapsibleTable = ({ title, children, id }) => {
+  const { openTables, setOpenTables } = useContext(TableContext);
+  const isOpen = openTables.has(id);
+  
+  const toggleTable = () => {
+    const newOpenTables = new Set(openTables);
+    if (isOpen) {
+      newOpenTables.delete(id);
+    } else {
+      newOpenTables.add(id);
+    }
+    setOpenTables(newOpenTables);
+  };
+
+  return (
+    <div className="collapsible-table">
+      <div 
+        className="collapsible-header" 
+        onClick={toggleTable}
+      >
+        <h4>{title}</h4>
+        <span className="toggle-icon">{isOpen ? '▼' : '▶'}</span>
+      </div>
+      {isOpen && children}
+    </div>
+  );
+};
+
+// Add a loading animation component
+const LoadingOverlay = () => (
+  <div className="loading-overlay">
+    <div className="loading-spinner"></div>
+    <p>Analyzing your run...</p>
+  </div>
+);
+
+const InfoTooltip = ({ text }) => (
+  <span className="info-tooltip" title={text}>ⓘ</span>
+);
+
+const ErrorMessage = ({ message }) => (
+  <div className="error-message">
+    <span className="error-icon">⚠️</span>
+    <p>{message}</p>
+    <button className="retry-button" onClick={() => window.location.reload()}>
+      Try Again
+    </button>
+  </div>
+);
+
+const SuccessMessage = ({ message }) => (
+  <div className="success-message">
+    <span className="success-icon">✓</span>
+    <p>{message}</p>
+  </div>
+);
+
 function App() {
   const API_URL = 'http://localhost:5001';
 
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [paceLimit, setPaceLimit] = useState(10.0);
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const [runDate, setRunDate] = useState('');
   const [error, setError] = useState('');
-  const [runDate, setRunDate] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState(null);
+  const [saveStatus, setSaveStatus] = useState('');
+  const [paceLimit, setPaceLimit] = useState(10);
   const [age, setAge] = useState('');
   const [restingHR, setRestingHR] = useState('');
-  const [mapLayers, setMapLayers] = useState({
-    pace: true,
-    elevation: true,
-    heartRate: true
-  });
   const [runHistory, setRunHistory] = useState([]);
   const [compareMode, setCompareMode] = useState(false);
   const [comparedRuns, setComparedRuns] = useState([]);
-  const [saveStatus, setSaveStatus] = useState('');
   const [userId, setUserId] = useState(null);
   const [username, setUsername] = useState('');
 
-  // Add near the top of the App component
-  useEffect(() => {
-    console.log('Run History State:', {
-      isAuthenticated: !!userId,
-      userId,
-      runHistory,
-      compareMode,
-      comparedRuns
-    });
-  }, [userId, runHistory, compareMode, comparedRuns]);
-
-  // Update fetchRunHistory with more logging
-  const fetchRunHistory = async () => {
-    if (!userId) {
-      console.log('No userId, skipping fetch');
-      return;
-    }
-
+  // Define fetchRunHistory first
+  const fetchRunHistory = useMemo(() => async () => {
     try {
-      console.log('Fetching run history...');
       const response = await fetch(`${API_URL}/runs`, {
         credentials: 'include'
       });
-      
-      if (response.status === 401) {
-        console.log('Unauthorized, clearing history');
-        setError('Please log in to view run history');
-        return;
+      if (response.ok) {
+        const data = await response.json();
+        setRunHistory(data);
       }
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('Received run history:', data);
-      setRunHistory(data);
     } catch (error) {
       console.error('Error fetching run history:', error);
-      setError('Failed to load run history');
     }
-  };
+  }, [API_URL]);
 
-  // Update useEffect to fetch run history when userId changes
+  // Now we can use fetchRunHistory in useEffect
   useEffect(() => {
-    if (userId) {
+    if (isAuthenticated) {
       fetchRunHistory();
     }
-  }, [userId]);
+  }, [isAuthenticated, fetchRunHistory]);
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        console.log('Checking auth at:', `${API_URL}/auth/check`);
+        const response = await fetch(`${API_URL}/auth/check`, {
+          credentials: 'include'
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log('Auth check response:', data);
+        setIsAuthenticated(data.authenticated);
+        setUserId(data.user_id);
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        setIsAuthenticated(false);
+      }
+    };
+    checkAuth();
+  }, []);
 
   // Load profile on mount
   useEffect(() => {
@@ -764,13 +744,13 @@ function App() {
           credentials: 'include'
         });
         if (response.ok) {
-          const data = await response.json();
+      const data = await response.json();
           setAge(data.age?.toString() || '0');
           setRestingHR(data.resting_hr?.toString() || '0');
         } else {
           console.error('Failed to load profile');
         }
-      } catch (error) {
+    } catch (error) {
         console.error('Error loading profile:', error);
       }
     };
@@ -786,44 +766,80 @@ function App() {
   };
 
   const handleFileChange = (event) => {
-    const file = event.target.files[0];
+    const file = event.target.files?.[0];
+    if (!file) {
+      setSelectedFile(null);
+      setFileName('');
+      setError('');
+      return;
+    }
+
     setSelectedFile(file);
+    setFileName(file.name);
     setError('');
-    
+
     // Extract date from filename
-    const filename = file.name;
-    const dateMatch = filename.match(/\d{4}-\d{2}-\d{2}/);
+    const dateMatch = file.name.match(/\d{4}-\d{2}-\d{2}/);
     if (dateMatch) {
-      const date = new Date(dateMatch[0]);
-      setRunDate(date.toLocaleDateString('en-US', { 
-        weekday: 'long',
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }));
+      setRunDate(dateMatch[0]);
+    } else {
+      // If no date in filename, use current date
+      const today = new Date();
+      setRunDate(today.toISOString().split('T')[0]);
     }
   };
 
-  const testBackendConnection = async () => {
+  const handleSaveRun = async (results) => {
+    if (!runDate) {
+      throw new Error('No run date available');
+    }
+
     try {
-      const response = await fetch(`${API_URL}/test`);
+      const response = await fetch(`${API_URL}/runs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          date: runDate,
+          data: results
+        })
+      });
+
       const data = await response.json();
-      console.log('Backend connection test:', data);
-      return true;
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to save run');
+      }
+
+      setSaveStatus('Run saved successfully!');
+      await fetchRunHistory();
     } catch (error) {
-      console.error('Backend connection test failed:', error);
-      return false;
+      console.error('Error saving run:', error);
+      throw error;
     }
   };
 
-  const handleAnalyzeRun = async (file, paceLimit) => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('paceLimit', paceLimit);
-      formData.append('age', age || '');
-      formData.append('restingHR', restingHR || '');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setSaveStatus('');
+    setError('');
 
+    if (!selectedFile) {
+      setError('Please select a file');
+      setLoading(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('paceLimit', paceLimit || 10);
+    formData.append('age', age || 0);
+    formData.append('restingHR', restingHR || 0);
+
+    try {
       const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         credentials: 'include',
@@ -834,45 +850,12 @@ function App() {
         throw new Error('Failed to analyze run');
       }
 
-      const data = await response.json();
-      console.log('Route Analysis:', data);
-      console.log('Map center:', data.route_data?.[0]?.coordinates?.[0]);
-      
-      // Validate route data
-      if (!data.route_data || !Array.isArray(data.route_data)) {
-        console.error('Invalid route data format');
-        return;
-      }
-
-      setResults(data);
-      if (data.saved) {
-        setSaveStatus('Run saved successfully');
-        // Fetch updated run history after saving new run
-        fetchRunHistory();
-      }
+      const results = await response.json();
+      setResults(results);
+      setSaveStatus(results.saved ? 'Run saved successfully!' : 'Run analyzed but not saved');
     } catch (error) {
-      console.error('Error analyzing run:', error);
-      alert('Failed to analyze run. Please try again.');
-    }
-  };
-
-  // Add this function to handle form submission
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setLoading(true);
-    setSaveStatus('');
-
-    if (!selectedFile) {
-      setError('Please select a file');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      await handleAnalyzeRun(selectedFile, paceLimit);
-    } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      setError('Failed to analyze run. Please try again.');
+      console.error('Error:', error);
+      setError(error.message || 'Failed to analyze run');
     } finally {
       setLoading(false);
     }
@@ -1029,33 +1012,35 @@ function App() {
     }
   };
 
-  // Update Mile Splits component with labels
+  // Update Mile Splits component
   const MileSplits = ({ splits }) => {
     if (!splits || splits.length === 0) return null;
 
     return (
       <div className="mile-splits">
         <h4>Mile Splits</h4>
-        <table className="splits-table">
-          <thead>
-            <tr>
-              <th>Mile</th>
-              <th>Split Time</th>
-              <th>Pace</th>
-              <th>Heart Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {splits.map((split, index) => (
-              <tr key={index}>
-                <td>{split.mile}</td>
-                <td>{split.split_time.toFixed(2)} min</td>
-                <td>{split.split_pace.toFixed(2)} min/mi</td>
-                <td>{Math.round(split.avg_hr)} bpm</td>
+        <div className="table-container">
+          <table className="splits-table">
+            <thead>
+              <tr>
+                <th>Mile</th>
+                <th>Split Time</th>
+                <th>Pace</th>
+                <th>Heart Rate</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {splits.map((split, index) => (
+                <tr key={index}>
+                  <td>{split.mile}</td>
+                  <td>{formatTime(split.split_time)}</td>
+                  <td>{formatTime(split.split_pace)} /mi</td>
+                  <td>{Math.round(split.avg_hr)} bpm</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -1554,11 +1539,6 @@ function App() {
         return;
       }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to delete run: ${response.status}`);
-      }
-
       // Refresh the run history after successful deletion
       console.log(`Successfully deleted run ${runId}`);
       fetchRunHistory();
@@ -1569,8 +1549,11 @@ function App() {
   };
 
   const handleLogin = (userId, username) => {
+    console.log('handleLogin called with:', userId, username);
     setUserId(userId);
     setUsername(username);
+    setIsAuthenticated(true);  // Make sure we set this
+    fetchRunHistory();  // Fetch run history after successful login
   };
 
   const handleLogout = async () => {
@@ -1580,6 +1563,9 @@ function App() {
         credentials: 'include'
       });
       setUserId(null);
+      setUsername('');
+      setIsAuthenticated(false);
+      setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -1587,239 +1573,256 @@ function App() {
 
   return (
     <ThemeProvider>
-      <div className="App">
-        {loading && <LoadingSpinner />}
-        {error && <div className="error-message">{error}</div>}
-        
-        {!userId ? (
-          <LoginForm onLogin={handleLogin} />
-        ) : (
-          <>
-            <header className="App-header">
-              <div className="header-controls">
-                <ProfileMenu 
-                  username={username}
-                  age={age}
-                  restingHR={restingHR}
-                  onSave={handleProfileSave}
-                  onLogout={handleLogout}
-                />
-              </div>
-              <h1>{runDate ? `Running Analysis for ${runDate}` : 'Running Analysis'}</h1>
-              <p className="subtitle">Upload your GPX file to analyze pace and heart rate data</p>
-            </header>
-
-            <main className="App-main">
-              {saveStatus && (
-                <div className="save-status">
-                  {saveStatus}
+      <TableProvider>
+    <div className="App">
+          {loading && <LoadingSpinner />}
+          {error && <ErrorMessage message={error} />}
+          
+          {!isAuthenticated ? (
+            <LoginForm onLogin={handleLogin} />
+          ) : (
+            <>
+      <header className="App-header">
+                <div className="header-controls">
+                  <ProfileMenu 
+                    username={username}
+                    age={age}
+                    restingHR={restingHR}
+                    onSave={handleProfileSave}
+                    onLogout={handleLogout}
+                  />
                 </div>
-              )}
+                <h1>{runDate ? `Running Analysis for ${runDate}` : 'Running Analysis'}</h1>
+        <p className="subtitle">Upload your GPX file to analyze pace and heart rate data</p>
+      </header>
+      
+      <main className="App-main">
+                {saveStatus && (
+                  <div className="save-status">
+                    {saveStatus}
+          </div>
+        )}
+        
+        <div className="upload-section">
+          <form onSubmit={handleSubmit} className="analysis-form">
+                    <div className="file-upload">
+                      <label htmlFor="file" className="file-upload-label">
+                <div className="file-upload-box">
+                          <span className="upload-icon">📁</span>
+                          <span className="upload-text">
+                            {fileName || 'Choose GPX file'}
+                          </span>
+                </div>
+              </label>
+              <input
+                type="file"
+                id="file"
+                accept=".gpx"
+                        onChange={handleFileChange}
+                        style={{ display: 'none' }}
+              />
+            </div>
+            
+            <div className="form-group">
+                      <label htmlFor="paceLimit">
+                        Target Pace (min/mile)
+                        <InfoTooltip text="This is the pace threshold that determines fast vs. slow segments" />
+                      </label>
+              <input
+                type="number"
+                id="paceLimit"
+                        value={paceLimit || ''}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value);
+                          setPaceLimit(isNaN(value) ? 10.0 : value);
+                        }}
+                step="0.1"
+                        min="4"
+                        max="20"
+              />
+            </div>
+            
+                    <button type="submit" disabled={loading || !selectedFile}>
+                      {loading ? <LoadingSpinner /> : 'Analyze Run'}
+            </button>
+          </form>
+        </div>
+
+                {loading ? (
+                  <LoadingOverlay />
+                ) : results && (
+          <div className="results">
+            <h2>Analysis Results</h2>
+            <div className="results-grid">
+              <div className="result-item">
+                <h3>Total Distance</h3>
+                <p className="result-value">{results.total_distance.toFixed(2)}</p>
+                <p className="result-unit">miles</p>
+                        <div className="hr-item">
+                          <p className="result-label">Overall Heart Rate</p>
+                          <p className="result-value-secondary">{Math.round(results.avg_hr_all)}</p>
+                          <p className="result-unit">bpm</p>
+                        </div>
+              </div>
               
-              <div className="upload-section">
-                <form onSubmit={handleSubmit} className="analysis-form">
-                  <div className="form-group file-input-group">
-                    <label htmlFor="file">
-                      <div className="file-upload-box">
-                        <span className="upload-icon">📁</span>
-                        <span className="upload-text">
-                          {selectedFile ? selectedFile.name : 'Choose GPX file'}
-                        </span>
+              <div className="result-item">
+                <h3>Fast Distance</h3>
+                <p className="result-value">{results.fast_distance.toFixed(2)}</p>
+                <p className="result-unit">miles</p>
+                <p className="result-percentage">
+                  ({results.percentage_fast.toFixed(1)}% of total)
+                </p>
+                        <div className="avg-pace">
+                          <p className="result-label">Average Pace</p>
+                          <p className="result-value-secondary">
+                            {formatTime(results.fast_segments.reduce((sum, segment) => sum + segment.pace, 0) / 
+                              results.fast_segments.length)}
+                          </p>
+                          <p className="result-unit">/mile</p>
+              </div>
+                  <div className="hr-item">
+                          <p className="result-label">Average Heart Rate</p>
+                          <p className="result-value-secondary">{Math.round(results.avg_hr_fast)}</p>
+                    <p className="result-unit">bpm</p>
+                  </div>
                       </div>
-                    </label>
-                    <input
-                      type="file"
-                      id="file"
-                      accept=".gpx"
-                      onChange={handleFileChange}
-                      style={{ display: 'none' }}
-                    />
+
+                      <div className="result-item">
+                        <h3>Slow Distance</h3>
+                        <p className="result-value">{results.slow_distance.toFixed(2)}</p>
+                        <p className="result-unit">miles</p>
+                        <p className="result-percentage">
+                          ({results.percentage_slow.toFixed(1)}% of total)
+                        </p>
+                        <div className="avg-pace">
+                          <p className="result-label">Average Pace</p>
+                          <p className="result-value-secondary">
+                            {formatTime(results.slow_segments.reduce((sum, segment) => sum + segment.pace, 0) / 
+                              results.slow_segments.length)}
+                          </p>
+                          <p className="result-unit">/mile</p>
                   </div>
-                  
-                  <div className="form-group">
-                    <label htmlFor="paceLimit">Target Pace (min/mile):</label>
-                    <input
-                      type="number"
-                      id="paceLimit"
-                      value={paceLimit}
-                      onChange={(e) => setPaceLimit(parseFloat(e.target.value))}
-                      step="0.1"
-                      min="4"
-                      max="20"
-                    />
-                  </div>
-                  
-                  <button type="submit" disabled={loading || !selectedFile}>
-                    {loading ? <LoadingSpinner /> : 'Analyze Run'}
-                  </button>
-                </form>
+                  <div className="hr-item">
+                          <p className="result-label">Average Heart Rate</p>
+                          <p className="result-value-secondary">{Math.round(results.avg_hr_slow)}</p>
+                    <p className="result-unit">bpm</p>
+                </div>
+              </div>
+            </div>
+
+              <div className="segments">
+                      {results && results.training_zones && (
+                        <TrainingZones zones={results.training_zones} />
+                      )}
+
+                      <h3>Route Map</h3>
+                      <RouteMap routeData={results.route_data} fastSegments={results.fast_segments} slowSegments={results.slow_segments} />
+                      
+                      <h3>Mile Splits</h3>
+                      {console.log('Mile splits data:', results.mile_splits)}
+                      <MileSplits splits={results.mile_splits} />
+                      
+                      <h3>Segment Analysis</h3>
+                      <div className="chart-container">
+                        <Bar data={prepareChartData(results)} options={chartOptions} />
+                      </div>
+                <div className="table-container">
+                        <CollapsibleTable 
+                          title={`Fast Segments (${results.fast_segments.length})`} 
+                          id="fast-segments"
+                        >
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Segment</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                        <th>Distance</th>
+                        <th>Pace</th>
+                                <th>Best Pace</th>
+                        <th>Heart Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.fast_segments.map((segment, index) => (
+                        <tr key={index}>
+                          <td>{index + 1}</td>
+                                  <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
+                                  <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
+                          <td>{segment.distance.toFixed(2)} mi</td>
+                                  <td>{formatTime(segment.pace)} /mi</td>
+                                  <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
+                          <td>{Math.round(segment.avg_hr)} bpm</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                        </CollapsibleTable>
+
+                        <CollapsibleTable 
+                          title={`Slow Segments (${results.slow_segments.length})`} 
+                          id="slow-segments"
+                        >
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Segment</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Distance</th>
+                                <th>Pace</th>
+                                <th>Best Pace</th>
+                                <th>Heart Rate</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {results.slow_segments.map((segment, index) => (
+                                <tr key={index}>
+                                  <td>{index + 1}</td>
+                                  <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
+                                  <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
+                                  <td>{segment.distance.toFixed(2)} mi</td>
+                                  <td>{formatTime(segment.pace)} /mi</td>
+                                  <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
+                                  <td>{Math.round(segment.avg_hr)} bpm</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </CollapsibleTable>
+                </div>
               </div>
 
-              {results && !loading && (
-                <div className="results">
-                  <h2>Analysis Results</h2>
-                  <div className="results-grid">
-                    <div className="result-item">
-                      <h3>Total Distance</h3>
-                      <p className="result-value">{results.total_distance.toFixed(2)}</p>
-                      <p className="result-unit">miles</p>
-                      <div className="hr-item">
-                        <p className="result-label">Overall Heart Rate</p>
-                        <p className="result-value-secondary">{Math.round(results.avg_hr_all)}</p>
-                        <p className="result-unit">bpm</p>
-                      </div>
-                    </div>
-                    
-                    <div className="result-item">
-                      <h3>Fast Distance</h3>
-                      <p className="result-value">{results.fast_distance.toFixed(2)}</p>
-                      <p className="result-unit">miles</p>
-                      <p className="result-percentage">
-                        ({results.percentage_fast.toFixed(1)}% of total)
-                      </p>
-                      <div className="avg-pace">
-                        <p className="result-label">Average Pace</p>
-                        <p className="result-value-secondary">
-                          {(results.fast_segments.reduce((sum, segment) => sum + segment.pace, 0) / 
-                            results.fast_segments.length).toFixed(1)}
-                        </p>
-                        <p className="result-unit">min/mile</p>
-                      </div>
-                      <div className="hr-item">
-                        <p className="result-label">Average Heart Rate</p>
-                        <p className="result-value-secondary">{Math.round(results.avg_hr_fast)}</p>
-                        <p className="result-unit">bpm</p>
-                      </div>
-                    </div>
+                    {results && results.pace_zones && (
+                      <PaceAnalysis 
+                        results={results}
+                        paceZones={results.pace_zones}
+                        elevationImpact={results.elevation_impact}
+                      />
+            )}
+          </div>
+        )}
 
-                    <div className="result-item">
-                      <h3>Slow Distance</h3>
-                      <p className="result-value">{results.slow_distance.toFixed(2)}</p>
-                      <p className="result-unit">miles</p>
-                      <p className="result-percentage">
-                        ({results.percentage_slow.toFixed(1)}% of total)
-                      </p>
-                      <div className="avg-pace">
-                        <p className="result-label">Average Pace</p>
-                        <p className="result-value-secondary">
-                          {(results.slow_segments.reduce((sum, segment) => sum + segment.pace, 0) / 
-                            results.slow_segments.length).toFixed(1)}
-                        </p>
-                        <p className="result-unit">min/mile</p>
-                      </div>
-                      <div className="hr-item">
-                        <p className="result-label">Average Heart Rate</p>
-                        <p className="result-value-secondary">{Math.round(results.avg_hr_slow)}</p>
-                        <p className="result-unit">bpm</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="segments">
-                    {results && results.training_zones && (
-                      <TrainingZones zones={results.training_zones} />
-                    )}
-
-                    <h3>Route Map</h3>
-                    <RouteMap routeData={results.route_data} fastSegments={results.fast_segments} slowSegments={results.slow_segments} />
-                    
-                    <h3>Segment Analysis</h3>
-                    <div className="chart-container">
-                      <Bar data={prepareChartData(results)} options={chartOptions} />
-                    </div>
-                    <MileSplits splits={results.mile_splits} />
-                    <div className="table-container">
-                      <h4>Fast Segments</h4>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Segment</th>
-                            <th>Start Time</th>
-                            <th>End Time</th>
-                            <th>Distance</th>
-                            <th>Avg Pace</th>
-                            <th>Best Pace</th>
-                            <th>Heart Rate</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {results.fast_segments.map((segment, index) => (
-                            <tr key={index}>
-                              <td>{index + 1}</td>
-                              <td>{segment.start_time ? 
-                                new Date(segment.start_time).toLocaleTimeString() : 'N/A'}</td>
-                              <td>{segment.end_time ? 
-                                new Date(segment.end_time).toLocaleTimeString() : 'N/A'}</td>
-                              <td>{segment.distance.toFixed(2)} mi</td>
-                              <td>{segment.pace.toFixed(1)} min/mi</td>
-                              <td>{segment.best_pace ? segment.best_pace.toFixed(1) : segment.pace.toFixed(1)} min/mi</td>
-                              <td>{Math.round(segment.avg_hr)} bpm</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-
-                      <h4>Slow Segments</h4>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Segment</th>
-                            <th>Start Time</th>
-                            <th>End Time</th>
-                            <th>Distance</th>
-                            <th>Avg Pace</th>
-                            <th>Best Pace</th>
-                            <th>Heart Rate</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {results.slow_segments.map((segment, index) => (
-                            <tr key={index}>
-                              <td>{index + 1}</td>
-                              <td>{segment.start_time ? 
-                                new Date(segment.start_time).toLocaleTimeString() : 'N/A'}</td>
-                              <td>{segment.end_time ? 
-                                new Date(segment.end_time).toLocaleTimeString() : 'N/A'}</td>
-                              <td>{segment.distance.toFixed(2)} mi</td>
-                              <td>{segment.pace.toFixed(1)} min/mi</td>
-                              <td>{segment.best_pace ? segment.best_pace.toFixed(1) : segment.pace.toFixed(1)} min/mi</td>
-                              <td>{Math.round(segment.avg_hr)} bpm</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {results && results.pace_zones && (
-                    <PaceAnalysis 
-                      results={results}
-                      paceZones={results.pace_zones}
-                      elevationImpact={results.elevation_impact}
+                {/* Move RunHistory outside of any conditional rendering */}
+                <div className="history-section">
+                  {!compareMode ? (
+                    <RunHistory 
+                      runs={runHistory} 
+                      onCompareRuns={handleCompareRuns}
+                      onRunDeleted={handleRunDeleted}
+                    />
+                  ) : (
+                    <RunComparison 
+                      runs={comparedRuns}
+                      onClose={() => setCompareMode(false)}
                     />
                   )}
                 </div>
-              )}
-
-              {/* Move RunHistory outside of any conditional rendering */}
-              <div className="history-section">
-                {!compareMode ? (
-                  <RunHistory 
-                    runs={runHistory} 
-                    onCompareRuns={handleCompareRuns}
-                    onRunDeleted={handleRunDeleted}
-                  />
-                ) : (
-                  <RunComparison 
-                    runs={comparedRuns}
-                    onClose={() => setCompareMode(false)}
-                  />
-                )}
-              </div>
-            </main>
-          </>
-        )}
-      </div>
+      </main>
+            </>
+          )}
+    </div>
+      </TableProvider>
     </ThemeProvider>
   );
 }
