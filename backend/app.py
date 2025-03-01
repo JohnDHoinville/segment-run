@@ -1,4 +1,4 @@
-5001app.config.update(
+app.config.update(
     SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='None',  # or 'Lax' if same-site is enough

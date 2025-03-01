@@ -63,7 +63,7 @@ def parse_time(time_str):
     return utc_time.astimezone(local_tz)
 
 # Function to parse GPX data and calculate distance under specified pace
-def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weight=70, gender=1):
+def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weight=None, gender=None):
     try:
         print(f"\n=== Starting Run Analysis ===")
         print(f"File path: {file_path}")
@@ -643,7 +643,20 @@ def estimate_vo2max(age, weight, gender, time_minutes, distance_km, max_hr):
         
     speed_kmh = distance_km / (time_minutes / 60)
     print(f"VO2 Max calculation - Speed: {speed_kmh} km/h")
-    return 132.853 - (0.0769 * weight) - (0.3877 * age) + (6.315 * gender) - (3.2649 * time_minutes) - (0.1565 * max_hr)
+    # Use a standard formula: Modified Uth-Sörensen-Overgaard formula
+    resting_hr = 60  # Fallback if not available
+    vo2max = 15.3 * (max_hr / resting_hr)
+    
+    # Convert speed to min per km pace for adjustment
+    pace_km = (time_minutes / distance_km)
+    
+    # Adjust based on speed - faster runners have higher VO2max
+    if pace_km < 4.5:  # Faster than 4:30 min/km
+        vo2max *= 1.15
+    elif pace_km < 5.5:  # Faster than 5:30 min/km
+        vo2max *= 1.05
+    
+    return round(vo2max, 1)
 
 def calculate_training_load(duration_minutes, avg_hr, max_hr, resting_hr):
     """Calculate Training Load using Banister TRIMP"""
@@ -683,6 +696,55 @@ def predict_race_times(recent_paces, distances=[5, 10, 21.1, 42.2]):
         predictions[f"{distance}k"] = predicted_time
         
     return predictions
+
+def calculate_vo2max(avg_hr, max_hr, avg_pace, user_age, gender):
+    """Calculate estimated VO2max using heart rate and pace data"""
+    if not avg_hr or not avg_pace or not user_age:
+        return None
+    
+    # Use Firstbeat formula (simplified version)
+    # VO2max = 15.3 × HRmax/HRrest
+    hrr = max_hr / avg_hr  # Heart rate ratio
+    pace_factor = 60 / avg_pace  # Convert pace to speed factor
+    
+    # Adjust for age and gender
+    age_factor = 1 - (user_age - 20) * 0.01 if user_age > 20 else 1
+    gender_factor = 1.0 if gender == 1 else 0.85  # Male=1, Female=0
+    
+    vo2max = 15.3 * hrr * pace_factor * age_factor * gender_factor
+    return round(vo2max, 1) if vo2max > 20 else None  # Only return reasonable values
+
+def calculate_training_load(duration_minutes, avg_hr, resting_hr, max_hr=None):
+    """Calculate training load using TRIMP (Training Impulse)"""
+    if not duration_minutes or not avg_hr or not resting_hr:
+        return None
+    
+    if not max_hr:
+        max_hr = 220  # Default max HR if not provided
+    
+    # Calculate heart rate reserve (HRR) percentage
+    hrr_percent = (avg_hr - resting_hr) / (max_hr - resting_hr)
+    
+    # Use Banister TRIMP formula
+    gender_factor = 1.92  # Male factor (use 1.67 for female)
+    trimp = duration_minutes * hrr_percent * 0.64 * math.exp(gender_factor * hrr_percent)
+    
+    return round(trimp) if trimp > 0 else None
+
+def calculate_recovery_time(training_load, fitness_level=None):
+    """Estimate recovery time based on training load"""
+    if not training_load:
+        return None
+    
+    # Basic formula: higher training load = longer recovery
+    if not fitness_level:
+        fitness_level = 1.0  # Default average fitness
+        
+    # Higher fitness = faster recovery
+    base_recovery = training_load * 0.2  # Each TRIMP unit = 0.2 hours recovery
+    adjusted_recovery = base_recovery / fitness_level
+    
+    return round(adjusted_recovery * 10) / 10  # Round to 1 decimal place
 
 def main():
     # List and select GPX file

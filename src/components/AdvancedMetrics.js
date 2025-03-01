@@ -6,35 +6,24 @@ const AdvancedMetrics = ({ vo2max, trainingLoad, recoveryTime }) => {
     <div className="advanced-metrics">
       <h3>Advanced Metrics</h3>
       <div className="metrics-grid">
-        <div className="metric-card">
-          <h4>VO2 Max</h4>
-          <p className="metric-value">{vo2max ? vo2max.toFixed(1) : 'N/A'}</p>
-          <p className="metric-unit">ml/kg/min</p>
-          <p className="metric-description">
-            Estimated maximum oxygen uptake capacity
-          </p>
+        <div className="metric-item">
+          <h4>Estimated VO2 Max</h4>
+          <p className="metric-value">{vo2max ? (vo2max + " ml/kg/min") : "Available with heart rate data"}</p>
+          {vo2max && <p className="metric-unit">ml/kg/min</p>}
         </div>
-
-        <div className="metric-card">
+        <div className="metric-item">
           <h4>Training Load</h4>
-          <p className="metric-value">
-            {trainingLoad ? Math.round(trainingLoad) : 'N/A'}
-          </p>
-          <p className="metric-unit">TRIMP</p>
-          <p className="metric-description">
-            Training load based on duration and intensity
-          </p>
+          <p className="metric-value">{trainingLoad ? trainingLoad : "Available with heart rate data"}</p>
+          {trainingLoad && <p className="metric-unit">TRIMP</p>}
         </div>
-
-        <div className="metric-card">
+        <div className="metric-item">
           <h4>Recovery Time</h4>
           <p className="metric-value">
-            {recoveryTime ? Math.round(recoveryTime * 10) / 10 : 'N/A'}
+            {recoveryTime 
+              ? (Math.floor(recoveryTime) + "h " + Math.round((recoveryTime % 1) * 60) + "m")
+              : "Available with heart rate data"}
           </p>
-          <p className="metric-unit">hours</p>
-          <p className="metric-description">
-            Recommended recovery time before next hard workout
-          </p>
+          {recoveryTime && <p className="metric-unit">hours</p>}
         </div>
       </div>
     </div>
