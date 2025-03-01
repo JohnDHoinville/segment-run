@@ -43,6 +43,8 @@ class RunDatabase:
                     user_id INTEGER NOT NULL,
                     age INTEGER DEFAULT 0,
                     resting_hr INTEGER DEFAULT 0,
+                    weight REAL DEFAULT 70,
+                    gender INTEGER DEFAULT 1,  /* 1 for male, 0 for female */
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id)
                 )
@@ -79,6 +81,16 @@ class RunDatabase:
         """Ensure all required tables exist without recreating the database"""
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
+            
+            # First, check if we need to add new columns
+            try:
+                cursor.execute('SELECT weight, gender FROM profile LIMIT 1')
+            except sqlite3.OperationalError:
+                print("Adding weight and gender columns to profile table")
+                cursor.execute('ALTER TABLE profile ADD COLUMN weight REAL DEFAULT 70')
+                cursor.execute('ALTER TABLE profile ADD COLUMN gender INTEGER DEFAULT 1')
+                conn.commit()
+            
             # Create tables if they don't exist
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
@@ -94,6 +106,8 @@ class RunDatabase:
                     user_id INTEGER NOT NULL,
                     age INTEGER DEFAULT 0,
                     resting_hr INTEGER DEFAULT 0,
+                    weight REAL DEFAULT 70,
+                    gender INTEGER DEFAULT 1,  /* 1 for male, 0 for female */
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id)
                 )
@@ -276,25 +290,37 @@ class RunDatabase:
             print(f"Database error deleting run {run_id}: {str(e)}")
             raise e
 
-    def save_profile(self, user_id, age, resting_hr):
+    def save_profile(self, user_id, age, resting_hr, weight=70, gender=1):
+        print(f"\nSaving profile for user {user_id}:")
+        # Convert from lbs to kg before storing (if desired):
+        weight_in_kg = weight * 0.453592
+
+        print(f"Age: {age}, Resting HR: {resting_hr}, Weight: {weight} lbs => {weight_in_kg:.1f} kg, Gender: {gender}")
+
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE profile 
-                SET age = ?, resting_hr = ?, updated_at = CURRENT_TIMESTAMP 
+                SET age = ?, resting_hr = ?, weight = ?, gender = ?, updated_at = CURRENT_TIMESTAMP 
                 WHERE user_id = ?
-            ''', (age, resting_hr, user_id))
+            ''', (age, resting_hr, weight_in_kg, gender, user_id))
             conn.commit()
+            print("Profile saved successfully")
 
     def get_profile(self, user_id):
+        print(f"\nGetting profile for user {user_id}")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT age, resting_hr FROM profile WHERE user_id = ?', (user_id,))
+            cursor.execute('SELECT age, resting_hr, weight, gender FROM profile WHERE user_id = ?', (user_id,))
             result = cursor.fetchone()
-            return {
+            profile = {
                 'age': result[0] if result else 0,
-                'resting_hr': result[1] if result else 0
+                'resting_hr': result[1] if result else 0,
+                'weight': result[2] if result else 70,
+                'gender': result[3] if result else 1
             }
+            print("Retrieved profile:", profile)
+            return profile
 
     def create_user(self, username, password):
         with sqlite3.connect(self.db_name) as conn:

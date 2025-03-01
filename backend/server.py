@@ -24,6 +24,7 @@ class DateTimeEncoder(JSONEncoder):
 load_dotenv('.flaskenv')
 
 app = Flask(__name__)
+print("Starting Flask server...")
 
 # Use the custom encoder for all JSON responses
 app.json_encoder = DateTimeEncoder
@@ -33,19 +34,20 @@ app.config.update(
     SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=3600  # 1 hour
+    PERMANENT_SESSION_LIFETIME=3600,  # 1 hour
+    SESSION_COOKIE_NAME='running_session'  # Custom session cookie name
 )
 
 # Generate a secure random key
 app.secret_key = secrets.token_hex(32)
 
-# Update CORS configuration
+# Configure CORS
 CORS(app,
     origins=["http://localhost:3000"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept"],
+    allow_headers=["Content-Type", "Accept", "Cookie"],  # Add Cookie to allowed headers
     supports_credentials=True,
-    expose_headers=["Content-Type", "Authorization"],
+    expose_headers=["Content-Type", "Authorization", "Set-Cookie"],  # Add Set-Cookie
     allow_credentials=True)
 
 # Add debug logging for session
@@ -77,6 +79,7 @@ def home():
 @login_required
 def analyze():
     try:
+        print("\n=== Starting Analysis ===")
         if 'file' not in request.files:
             print("No file in request")
             return jsonify({'error': 'No file uploaded'}), 400
@@ -88,12 +91,17 @@ def analyze():
         print(f"File size: {len(file.read())} bytes")
         file.seek(0)  # Reset file pointer after reading
         
+        # Debug profile data
+        print("\nSession data:", dict(session))
+        print("User ID:", session.get('user_id'))
+        
         pace_limit = float(request.form.get('paceLimit', 0))
         age = int(request.form.get('age', 0))
         resting_hr = int(request.form.get('restingHR', 0))
         
-        print(f"\nAnalyzing file: {file.filename}")
-        print(f"Parameters: pace_limit={pace_limit}, age={age}, resting_hr={resting_hr}")
+        # Get user profile for additional metrics
+        profile = db.get_profile(session['user_id'])
+        print("\nProfile data:", profile)
         
         if not file or not file.filename.endswith('.gpx'):
             print("Invalid file format")
@@ -107,13 +115,9 @@ def analyze():
         temp_path = 'temp.gpx'
         file.save(temp_path)
         
-        # Verify file was saved
-        if not os.path.exists(temp_path):
-            print("Failed to save temporary file")
-            return jsonify({'error': 'Failed to save uploaded file'}), 500
-            
-        print(f"Saved file temporarily to {temp_path}")
-        print(f"File size on disk: {os.path.getsize(temp_path)} bytes")
+        print("\nFile saved to:", temp_path)
+        print("File exists:", os.path.exists(temp_path))
+        print("File size:", os.path.getsize(temp_path))
         
         try:
             # Analyze the file
@@ -121,35 +125,26 @@ def analyze():
                 temp_path, 
                 pace_limit,
                 user_age=age,
-                resting_hr=resting_hr
+                resting_hr=resting_hr,
+                weight=profile['weight'],
+                gender=profile['gender']
             )
-            print("\nAnalysis completed successfully")
-            print("\nTraining zones in result:", 'training_zones' in analysis_result)
-            if 'training_zones' in analysis_result:
-                print("Training zones data:", json.dumps(analysis_result['training_zones'], indent=2))
-            
-            # Debug: Print key values
-            print("\nKey values from analysis:")
-            print(f"Total distance: {analysis_result.get('total_distance', 0)}")
-            print(f"Fast distance: {analysis_result.get('fast_distance', 0)}")
-            print(f"Slow distance: {analysis_result.get('slow_distance', 0)}")
-            print(f"Number of fast segments: {len(analysis_result.get('fast_segments', []))}")
-            print(f"Number of slow segments: {len(analysis_result.get('slow_segments', []))}")
             
             if not analysis_result:
                 print("Analysis returned no results")
                 return jsonify({'error': 'Failed to analyze run data'}), 500
                 
-            # Prepare run data for saving
+            # Build run_data to save in the runs table
             run_data = {
-                'date': request.form.get('date', datetime.now().strftime('%Y-%m-%d')),
+                'date': run_date,   # or datetime.now().strftime('%Y-%m-%d')
                 'data': analysis_result
             }
             
-            print("\nAttempting to save run data")
+            # Actually save the run
+            print("\nAttempting to save run data...")
             run_id = db.save_run(session['user_id'], run_data)
             print(f"Run saved successfully with ID: {run_id}")
-            
+
             return jsonify({
                 'message': 'Analysis complete',
                 'data': analysis_result,
@@ -158,9 +153,10 @@ def analyze():
             })
             
         except Exception as e:
-            print(f"\nError during analysis or save:")
+            print(f"\nError during analysis:")
             print(f"Error type: {type(e).__name__}")
             print(f"Error message: {str(e)}")
+            print("Full traceback:")
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
             
@@ -171,9 +167,12 @@ def analyze():
                 print(f"Cleaned up temporary file: {temp_path}")
                 
     except Exception as e:
-        print(f"Server error: {str(e)}")
+        print(f"\nServer error:")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print("Full traceback:")
         traceback.print_exc()
-        return jsonify({'error': 'Server error processing request'}), 500
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/runs', methods=['GET'])
 @login_required
@@ -307,13 +306,23 @@ def save_profile():
         data = request.json
         age = data.get('age', 0)
         resting_hr = data.get('resting_hr', 0)
+        weight = data.get('weight', 70)
+        gender = data.get('gender', 1)
         
-        db.save_profile(session['user_id'], age, resting_hr)
+        db.save_profile(
+            user_id=session['user_id'],
+            age=age,
+            resting_hr=resting_hr,
+            weight=weight,
+            gender=gender
+        )
         
         return jsonify({
             'message': 'Profile saved successfully',
             'age': age,
-            'resting_hr': resting_hr
+            'resting_hr': resting_hr,
+            'weight': weight,
+            'gender': gender
         })
     except Exception as e:
         print(f"Error saving profile: {str(e)}")
@@ -345,19 +354,25 @@ def register():
 @app.route('/auth/login', methods=['POST'])
 def login():
     try:
+        print("\nReceived login request")
         data = request.json
         username = data.get('username')
         password = data.get('password')
+        print(f"Login attempt for user: {username}")
         
         user_id = db.verify_user(username, password)
         if user_id:
             session['user_id'] = user_id
             session.modified = True  # Ensure session is saved
-            print(f"Login successful. Session: {dict(session)}")  # Debug print
+            print(f"\nLogin successful:")
+            print(f"User ID: {user_id}")
+            print(f"Session: {dict(session)}")
+            print(f"Cookies to be set: {dict(request.cookies)}")
             return jsonify({
                 'message': 'Login successful',
                 'user_id': user_id
             })
+        print("Login failed: Invalid credentials")
         return jsonify({'error': 'Invalid credentials'}), 401
     except Exception as e:
         print(f"Login error: {str(e)}")
@@ -391,23 +406,37 @@ def change_password():
 
 @app.route('/auth/check', methods=['GET'])
 def check_auth():
+    print("Received auth check request")
     try:
         if 'user_id' in session:
+            print(f"User {session['user_id']} is authenticated")
             return jsonify({
                 'authenticated': True,
                 'user_id': session['user_id']
             })
+        print("No user in session")
         return jsonify({
             'authenticated': False,
             'user_id': None
         })
     except Exception as e:
         print(f"Auth check error: {str(e)}")
-        traceback.print_exc()
         return jsonify({
             'authenticated': False,
             'error': str(e)
         }), 500
+
+@app.route('/debug', methods=['GET'])
+def debug():
+    return jsonify({'status': 'Backend server is running'})
+
+@app.route('/debug/session', methods=['GET'])
+def debug_session():
+    return jsonify({
+        'session': dict(session),
+        'cookies': dict(request.cookies),
+        'headers': dict(request.headers)
+    })
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")

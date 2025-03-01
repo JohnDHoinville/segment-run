@@ -1,4 +1,4 @@
-FLASK_APP=wsgi:app
+FLASK_APP=server.py
 FLASK_ENV=development
-FLASK_DEBUG=True
+FLASK_DEBUG=1
 FLASK_RUN_PORT=5001

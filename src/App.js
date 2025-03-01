@@ -4,6 +4,8 @@ import './App.css';
 import LoadingSpinner from './components/LoadingSpinner';
 import LoginForm from './components/LoginForm';
 import TrainingZones from './components/TrainingZones';
+import AdvancedMetrics from './components/AdvancedMetrics';
+import RacePredictions from './components/RacePredictions';
 import { API_URL } from './config';
 import { Bar, Line } from 'react-chartjs-2';
 import {
@@ -77,6 +79,8 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [editAge, setEditAge] = useState(age || '');
   const [editRestingHR, setEditRestingHR] = useState(restingHR || '');
+  const [editWeight, setEditWeight] = useState('70');
+  const [editGender, setEditGender] = useState('1');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -88,6 +92,13 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
   useEffect(() => {
     setEditAge(age || '');
     setEditRestingHR(restingHR || '');
+    // Get weight and gender from profile
+    fetch(`${API_URL}/profile`, { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        setEditWeight(data.weight?.toString() || '70');
+        setEditGender(data.gender?.toString() || '1');
+      });
   }, [age, restingHR]);
 
   // Close menu when clicking outside
@@ -115,7 +126,9 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
         credentials: 'include',
         body: JSON.stringify({
           age: parseInt(editAge),
-          resting_hr: parseInt(editRestingHR)
+          resting_hr: parseInt(editRestingHR),
+          weight: parseFloat(editWeight),
+          gender: parseInt(editGender)
         }),
       });
 
@@ -258,6 +271,29 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   max="200"
                   placeholder="Enter resting heart rate"
                 />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="weight">Weight (lbs):</label>
+                <input
+                  type="number"
+                  id="weight"
+                  value={editWeight}
+                  onChange={(e) => setEditWeight(e.target.value)}
+                  placeholder="Enter your weight in lbs"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="gender">Gender:</label>
+                <select
+                  id="gender"
+                  value={editGender}
+                  onChange={(e) => setEditGender(e.target.value)}
+                >
+                  <option value="1">Male</option>
+                  <option value="0">Female</option>
+                </select>
               </div>
 
               <button onClick={handleSave} className="save-button">
@@ -734,11 +770,18 @@ function App() {
         }
         const data = await response.json();
         console.log('Auth check response:', data);
-        setIsAuthenticated(data.authenticated);
-        setUserId(data.user_id);
+        if (data.authenticated) {
+          setUserId(data.user_id);
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+          setUserId(null);
+        }
       } catch (error) {
-        console.error('Auth check failed:', error);
+        console.error('Auth check error details:', error);
+        console.log('Auth check failed:', error);
         setIsAuthenticated(false);
+        setUserId(null);
       }
     };
     checkAuth();
@@ -844,6 +887,11 @@ function App() {
     console.log('Uploading file:', selectedFile.name);
     console.log('File size:', selectedFile.size);
     console.log('File type:', selectedFile.type);
+    console.log('Form data:', {
+      paceLimit,
+      age,
+      restingHR
+    });
 
     const formData = new FormData();
     formData.append('file', selectedFile);
@@ -860,17 +908,18 @@ function App() {
       });
 
       console.log('Response status:', response.status);
+      const responseData = await response.json();
+      console.log('Response data:', responseData);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Server error:', errorData);
-        throw new Error(errorData.error || 'Failed to analyze run');
+        console.error('Server error:', responseData);
+        throw new Error(responseData.error || 'Failed to analyze run');
       }
 
-      const results = await response.json();
-      console.log('Analysis results:', results);
-      console.log('Training zones:', results.data?.training_zones);
-      setResults(results.data);  // Extract the data from the response
-      setSaveStatus(results.saved ? 'Run saved successfully!' : 'Run analyzed but not saved');
+      console.log('Analysis results:', responseData);
+      console.log('Training zones:', responseData.data?.training_zones);
+      setResults(responseData.data);
+      setSaveStatus(responseData.saved ? 'Run saved successfully!' : 'Run analyzed but not saved');
     } catch (error) {
       console.error('Error:', error);
       setError(error.message || 'Failed to analyze run');
@@ -1528,12 +1577,14 @@ function App() {
     }
   };
 
-  const handleLogin = (userId, username) => {
-    console.log('handleLogin called with:', userId, username);
+  const handleLogin = async (userId, username) => {
+    console.log('Login successful, setting state:', { userId, username });
     setUserId(userId);
     setUsername(username);
-    setIsAuthenticated(true);  // Make sure we set this
-    fetchRunHistory();  // Fetch run history after successful login
+    setIsAuthenticated(true);
+    // Wait a moment for session to be set before fetching data
+    await new Promise(resolve => setTimeout(resolve, 100));
+    fetchRunHistory();
   };
 
   const handleLogout = async () => {
@@ -1638,6 +1689,14 @@ function App() {
                 ) : results && (
           <div className="results">
             <h2>Analysis Results</h2>
+            
+            {/* Add Advanced Metrics */}
+            <AdvancedMetrics 
+              vo2max={results.vo2max}
+              trainingLoad={results.training_load}
+              recoveryTime={results.recovery_time}
+            />
+            
             <div className="results-grid">
               <div className="result-item">
                 <h3>Total Distance</h3>
@@ -1773,6 +1832,11 @@ function App() {
                 paceZones={results.pace_zones}
                 elevationImpact={results.elevation_impact}
               />
+            )}
+
+            {/* Add Race Predictions */}
+            {results?.race_predictions && (
+              <RacePredictions predictions={results.race_predictions} />
             )}
           </div>
         )}

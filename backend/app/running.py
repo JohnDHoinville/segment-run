@@ -7,6 +7,7 @@ import glob
 import json
 from tzlocal import get_localzone
 import pytz
+import math
 
 # Add these constants at the top
 TRAINING_ZONES = {
@@ -62,10 +63,20 @@ def parse_time(time_str):
     return utc_time.astimezone(local_tz)
 
 # Function to parse GPX data and calculate distance under specified pace
-def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
+def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weight=70, gender=1):
     try:
-        print(f"\nStarting analysis of {file_path}")
+        print(f"\n=== Starting Run Analysis ===")
+        print(f"File path: {file_path}")
         print(f"Pace limit: {pace_limit} min/mile")
+        print(f"User metrics - Age: {user_age}, Resting HR: {resting_hr}")
+        print(f"Additional metrics - Weight: {weight} (entered in lbs), Gender: {gender}")
+        
+        # Convert from lbs to kg
+        weight_in_kg = weight * 0.453592
+        
+        # Verify file exists
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"GPX file not found at {file_path}")
         
         tree = ET.parse(file_path)
         root = tree.getroot()
@@ -268,6 +279,50 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
         print("\nTraining Zones Result:")
         print(json.dumps(training_zones, indent=2))
 
+        # Calculate additional metrics
+        max_hr = max(all_heart_rates) if all_heart_rates else None
+        duration_minutes = (point_segments[-1]['time'] - point_segments[0]['time']).total_seconds() / 60
+        avg_hr = sum(all_heart_rates) / len(all_heart_rates) if all_heart_rates else None
+        
+        print("\nCalculating advanced metrics:")
+        print(f"Max HR: {max_hr}")
+        print(f"Duration: {duration_minutes} minutes")
+        print(f"Average HR: {avg_hr}")
+        
+        # Calculate VO2 Max
+        vo2max = estimate_vo2max(
+            age=user_age,
+            weight=weight_in_kg,
+            gender=gender,
+            time_minutes=duration_minutes,
+            distance_km=total_distance_all * 1.60934,  # Convert miles to km
+            max_hr=max_hr
+        )
+        print(f"Calculated VO2 Max: {vo2max}")
+        
+        # Calculate training load
+        training_load = calculate_training_load(
+            duration_minutes=duration_minutes,
+            avg_hr=avg_hr,
+            max_hr=max_hr,
+            resting_hr=resting_hr
+        )
+        print(f"Calculated Training Load: {training_load}")
+        
+        # Calculate recovery time
+        recovery_time = recommend_recovery_time(
+            training_load=training_load,
+            resting_hr=resting_hr,
+            age=user_age
+        )
+        print(f"Calculated Recovery Time: {recovery_time}")
+        
+        # Predict race times
+        race_predictions = predict_race_times(
+            [s['pace'] for s in fast_segments if s['pace'] != float('inf')]
+        )
+        print(f"Calculated Race Predictions: {race_predictions}")
+
         return {
             'total_distance': total_distance_all,
             'fast_distance': total_fast_distance,
@@ -284,7 +339,12 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None):
             'mile_splits': mile_splits,
             'training_zones': training_zones,
             'pace_recommendations': get_pace_recommendations([s['pace'] for s in fast_segments if s['pace'] != float('inf')]),
-            'pace_limit': float(pace_limit)
+            'pace_limit': float(pace_limit),
+            'vo2max': vo2max,
+            'training_load': training_load,
+            'recovery_time': recovery_time,
+            'race_predictions': race_predictions,
+            'max_hr': max_hr
         }
         
     except Exception as e:
@@ -571,6 +631,58 @@ def analyze_elevation_impact(point_segments):
             })
     
     return elevation_pace_data
+
+def estimate_vo2max(age, weight, gender, time_minutes, distance_km, max_hr):
+    """Estimate VO2 Max using heart rate and pace data"""
+    if not all([age, weight, time_minutes, distance_km, max_hr]):
+        print("VO2 Max calculation missing required data:", {
+            'age': age, 'weight': weight, 'time': time_minutes,
+            'distance': distance_km, 'max_hr': max_hr
+        })
+        return None
+        
+    speed_kmh = distance_km / (time_minutes / 60)
+    print(f"VO2 Max calculation - Speed: {speed_kmh} km/h")
+    return 132.853 - (0.0769 * weight) - (0.3877 * age) + (6.315 * gender) - (3.2649 * time_minutes) - (0.1565 * max_hr)
+
+def calculate_training_load(duration_minutes, avg_hr, max_hr, resting_hr):
+    """Calculate Training Load using Banister TRIMP"""
+    if not all([duration_minutes, avg_hr, max_hr, resting_hr]):
+        print("Training Load calculation missing required data:", {
+            'duration': duration_minutes, 'avg_hr': avg_hr,
+            'max_hr': max_hr, 'resting_hr': resting_hr
+        })
+        return None
+        
+    hrr_ratio = (avg_hr - resting_hr) / (max_hr - resting_hr)
+    intensity = 0.64 * math.exp(1.92 * hrr_ratio)
+    return duration_minutes * avg_hr * intensity
+
+def recommend_recovery_time(training_load, resting_hr, age):
+    """Recommend recovery time based on training load and personal metrics"""
+    if not all([training_load, resting_hr, age]):
+        return None
+        
+    base_recovery = training_load * 0.2  # Hours
+    age_factor = 1 + max(0, (age - 30) * 0.02)
+    hr_factor = 1 + max(0, (resting_hr - 60) * 0.01)
+    return base_recovery * age_factor * hr_factor
+
+def predict_race_times(recent_paces, distances=[5, 10, 21.1, 42.2]):
+    """Predict race times using Riegel formula"""
+    if not recent_paces:
+        return None
+        
+    best_pace = min(recent_paces)
+    base_time = best_pace * 5  # Use 5k as base
+    
+    predictions = {}
+    for distance in distances:
+        # Riegel formula: T2 = T1 * (D2/D1)^1.06
+        predicted_time = base_time * (distance/5) ** 1.06
+        predictions[f"{distance}k"] = predicted_time
+        
+    return predictions
 
 def main():
     # List and select GPX file

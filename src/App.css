@@ -1217,3 +1217,26 @@ tr:hover {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+.profile-content .form-group {
+  margin-bottom: 15px;
+}
+
+.profile-content input,
+.profile-content select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--input-background);
+  color: var(--text-primary);
+}
+
+.profile-content select {
+  cursor: pointer;
+}
+
+.profile-content select option {
+  background: var(--background-primary);
+  color: var(--text-primary);
+}

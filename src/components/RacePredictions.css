@@ -1,0 +1,38 @@
+.race-predictions {
+  margin: 20px 0;
+  padding: 20px;
+  background: var(--background-secondary);
+  border-radius: 10px;
+}
+
+.predictions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px;
+  margin-top: 15px;
+}
+
+.prediction-card {
+  padding: 15px;
+  background: var(--background-primary);
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.prediction-card h4 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.predicted-time {
+  font-size: 1.8em;
+  font-weight: bold;
+  margin: 10px 0;
+  color: var(--accent-primary);
+}
+
+.predicted-pace {
+  font-size: 1em;
+  color: var(--text-secondary);
+} 
