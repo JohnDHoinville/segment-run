@@ -1758,6 +1758,33 @@ function App() {
                 recoveryTime={results.recovery_time}
               />
               
+              {/* Add Mile Splits listing */}
+              <CollapsibleTable
+                title={`Mile Splits (${results?.mile_splits?.length || 0})`}
+                id="mile-splits"
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Mile #</th>
+                      <th>Distance</th>
+                      <th>Pace</th>
+                      <th>Avg HR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results?.mile_splits?.map((split, index) => (
+                      <tr key={index}>
+                        <td>{index + 1}</td>
+                        <td>{formatNumber(split.distance)} mi</td>
+                        <td>{formatTime(split.pace)} /mi</td>
+                        <td>{formatNumber(split.avg_hr, 0)} bpm</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CollapsibleTable>
+
               <h3>Mile Splits</h3>
               <MileSplits splits={results?.mile_splits || []} />
               

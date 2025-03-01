@@ -4,10 +4,10 @@ import os
 # Load environment variables from .flaskenv
 load_dotenv('.flaskenv')
 
-from server import app
+from backend.server import app
 
 if __name__ == '__main__':
-    port = int(os.environ.get('FLASK_RUN_PORT', 5001))
+    port = 5001  # Force port to 5001
     app.run(
         host='localhost',
         port=port,

@@ -3,8 +3,8 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
 import os
-from app.database import RunDatabase
-from app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
+from backend.app.database import RunDatabase
+from backend.app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
 import json
 from datetime import datetime
 import re
@@ -12,6 +12,9 @@ from functools import wraps
 import secrets
 import traceback
 from json import JSONEncoder
+from backend.routes.auth import auth_bp
+from backend.routes.runs import runs_bp
+from backend.routes.profile import profile_bp
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -329,114 +332,10 @@ def save_profile():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/auth/register', methods=['POST'])
-def register():
-    try:
-        data = request.json
-        username = data.get('username')
-        password = data.get('password')
-        
-        if not username or not password:
-            return jsonify({'error': 'Username and password required'}), 400
-            
-        user_id = db.create_user(username, password)
-        session['user_id'] = user_id
-        
-        return jsonify({
-            'message': 'User registered successfully',
-            'user_id': user_id
-        })
-    except Exception as e:
-        print(f"Registration error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'error': 'Username already exists'}), 400
-
-@app.route('/auth/login', methods=['POST'])
-def login():
-    try:
-        print("\nReceived login request")
-        data = request.json
-        username = data.get('username')
-        password = data.get('password')
-        print(f"Login attempt for user: {username}")
-        
-        user_id = db.verify_user(username, password)
-        if user_id:
-            session['user_id'] = user_id
-            session.modified = True  # Ensure session is saved
-            print(f"\nLogin successful:")
-            print(f"User ID: {user_id}")
-            print(f"Session: {dict(session)}")
-            print(f"Cookies to be set: {dict(request.cookies)}")
-            return jsonify({
-                'message': 'Login successful',
-                'user_id': user_id
-            })
-        print("Login failed: Invalid credentials")
-        return jsonify({'error': 'Invalid credentials'}), 401
-    except Exception as e:
-        print(f"Login error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/auth/logout', methods=['POST'])
-def logout():
-    session.pop('user_id', None)
-    return jsonify({'message': 'Logged out successfully'})
-
-@app.route('/auth/change-password', methods=['POST'])
-@login_required
-def change_password():
-    try:
-        data = request.json
-        current_password = data.get('current_password')
-        new_password = data.get('new_password')
-        
-        if not current_password or not new_password:
-            return jsonify({'error': 'Both current and new password required'}), 400
-            
-        if not db.update_password(session['user_id'], current_password, new_password):
-            return jsonify({'error': 'Current password is incorrect'}), 401
-            
-        return jsonify({'message': 'Password updated successfully'})
-    except Exception as e:
-        print(f"Password change error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/auth/check', methods=['GET'])
-def check_auth():
-    print("Received auth check request")
-    try:
-        if 'user_id' in session:
-            print(f"User {session['user_id']} is authenticated")
-            return jsonify({
-                'authenticated': True,
-                'user_id': session['user_id']
-            })
-        print("No user in session")
-        return jsonify({
-            'authenticated': False,
-            'user_id': None
-        })
-    except Exception as e:
-        print(f"Auth check error: {str(e)}")
-        return jsonify({
-            'authenticated': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/debug', methods=['GET'])
-def debug():
-    return jsonify({'status': 'Backend server is running'})
-
-@app.route('/debug/session', methods=['GET'])
-def debug_session():
-    return jsonify({
-        'session': dict(session),
-        'cookies': dict(request.cookies),
-        'headers': dict(request.headers)
-    })
+# Register the separate route blueprints
+app.register_blueprint(auth_bp)
+app.register_blueprint(runs_bp)
+app.register_blueprint(profile_bp)
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
