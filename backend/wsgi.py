@@ -7,7 +7,7 @@ load_dotenv('.flaskenv')
 from backend.server import app
 
 if __name__ == '__main__':
-    port = 5001  # Force port to 5001
+    port = 5000  # Match React configuration
     app.run(
         host='localhost',
         port=port,
