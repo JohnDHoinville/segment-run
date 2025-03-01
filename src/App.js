@@ -1690,13 +1690,6 @@ function App() {
           <div className="results">
             <h2>Analysis Results</h2>
             
-            {/* Add Advanced Metrics */}
-            <AdvancedMetrics 
-              vo2max={results.vo2max}
-              trainingLoad={results.training_load}
-              recoveryTime={results.recovery_time}
-            />
-            
             <div className="results-grid">
               <div className="result-item">
                 <h3>Total Distance</h3>
@@ -1756,6 +1749,13 @@ function App() {
                 routeData={results?.route_data || []} 
                 fastSegments={results?.fast_segments || []} 
                 slowSegments={results?.slow_segments || []} 
+              />
+              
+              {/* Only one AdvancedMetrics instance, passing same props as before */}
+              <AdvancedMetrics 
+                vo2max={results.vo2max}
+                trainingLoad={results.training_load}
+                recoveryTime={results.recovery_time}
               />
               
               <h3>Mile Splits</h3>
