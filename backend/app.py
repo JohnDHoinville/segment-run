@@ -1,15 +1,4 @@
-fetch(`${API_URL}/auth/login`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username, password }),
-  credentials: 'include'    // <-- important
-}); 
-
-fetch(`${API_URL}/runs`, {
-  credentials: 'include',   // <-- important 
-}); 
-
-app.config.update(
+5001app.config.update(
     SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='None',  # or 'Lax' if same-site is enough
