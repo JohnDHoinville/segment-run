@@ -1,0 +1,33 @@
+.pace-progress-chart {
+  margin: 20px 0;
+  padding: 20px;
+  background-color: var(--card-bg-color, #fff);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.pace-progress-chart h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: var(--text-color, #333);
+}
+
+.chart-subtitle {
+  font-size: 0.9rem;
+  color: var(--secondary-text-color, #666);
+  margin-bottom: 15px;
+}
+
+.chart-container {
+  height: 300px;
+}
+
+.pace-progress-empty {
+  margin: 20px 0;
+  padding: 20px;
+  background-color: var(--card-bg-color, #fff);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  color: var(--secondary-text-color, #666);
+} 

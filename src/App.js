@@ -29,6 +29,7 @@ import {
   CircleMarker
 } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import PaceProgressChart from './components/PaceProgressChart';
 
 // Register ChartJS components
 ChartJS.register(
@@ -733,6 +734,7 @@ function App() {
   const [comparedRuns, setComparedRuns] = useState([]);
   const [userId, setUserId] = useState(null);
   const [username, setUsername] = useState('');
+  const [selectedRunId, setSelectedRunId] = useState(null);
 
   // Define fetchRunHistory first
   const fetchRunHistory = useMemo(() => async () => {
@@ -1235,9 +1237,6 @@ function App() {
   };
 
   const RunHistory = ({ runs, onCompareRuns, onRunDeleted }) => {
-    const [selectedRuns, setSelectedRuns] = useState([]);
-    const [error, setError] = useState('');
-
     console.log("Run history data with pace limits:", runs);
 
     // Debug the first few runs to see exact pace_limit values
@@ -1248,7 +1247,7 @@ function App() {
     }
 
     // Sort runs by date in descending order (newest first)
-    const sortedRuns = [...(runs || [])].sort((a, b) => {
+    const sortedRuns = [...runs].sort((a, b) => {
       return new Date(b.date) - new Date(a.date);
     });
 
@@ -1294,33 +1293,14 @@ function App() {
       return possibleDistances.find(d => typeof d === 'number' && !isNaN(d));
     };
 
+    // Find the selected run
+    const selectedRun = useMemo(() => {
+      return runs.find(run => run.id === selectedRunId);
+    }, [runs, selectedRunId]);
+
+    // Handle row click to show more details
     const handleRowClick = (runId) => {
-      setSelectedRuns(prev => {
-        if (prev.includes(runId)) {
-          return prev.filter(id => id !== runId);
-        }
-        if (prev.length < 2) {
-          return [...prev, runId];
-        }
-        return prev;
-      });
-    };
-
-    const handleCompare = () => {
-      if (selectedRuns.length === 2) {
-        onCompareRuns(selectedRuns);
-      }
-    };
-
-    const handleDelete = async (runId) => {
-      if (window.confirm('Are you sure you want to delete this run?')) {
-        try {
-          await onRunDeleted(runId);
-          setSelectedRuns(prev => prev.filter(id => id !== runId));
-        } catch (error) {
-          setError(error.message || 'Failed to delete run');
-        }
-      }
+      setSelectedRunId(runId === selectedRunId ? null : runId);
     };
 
     if (!runs || runs.length === 0) {
@@ -1337,17 +1317,13 @@ function App() {
         <h2>Run History</h2>
         <div className="history-controls">
           <button 
-            onClick={handleCompare}
-            disabled={selectedRuns.length !== 2}
-            className="compare-button"
+            onClick={() => window.location.reload(true)}
+            className="refresh-button"
           >
-            Compare Selected Runs ({selectedRuns.length}/2)
+            Refresh Data
           </button>
         </div>
         {error && <div className="error-message">{error}</div>}
-        <button onClick={() => window.location.reload(true)}>
-          Refresh Data
-        </button>
         <table className="history-table">
           <thead>
             <tr>
@@ -1361,52 +1337,56 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {sortedRuns.map(run => {
-              const distance = getRunDistance(run);
-              
-              return (
-                <tr 
-                  key={run.id}
-                  className={selectedRuns.includes(run.id) ? 'selected' : ''}
-                >
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedRuns.includes(run.id)}
-                      onChange={() => handleRowClick(run.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </td>
-                  <td>{new Date(run.date).toLocaleDateString()}</td>
-                  <td>{safeNumber(distance)} mi</td>
-                  <td>{safeNumber(run.avg_pace, 1)} min/mi</td>
-                  <td>{safeNumber(run.avg_hr, 0)} bpm</td>
-                  <td>
-                    {(getPaceLimit(run)) ? 
-                      (() => {
-                        const paceLimit = getPaceLimit(run);
-                        const mins = Math.floor(paceLimit);
-                        const secs = Math.round((paceLimit - mins) * 60);
-                        return `${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
-                      })() : 
-                      'N/A'}
-                  </td>
-                  <td>
-                    <button 
-                      className="delete-button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(run.id);
-                      }}
-                    >
-                      🗑️
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {sortedRuns.map(run => (
+              <tr 
+                key={run.id} 
+                onClick={() => handleRowClick(run.id)} 
+                className={selectedRunId === run.id ? 'selected-run' : ''}
+              >
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedRunId === run.id}
+                    onChange={(e) => e.stopPropagation()}
+                  />
+                </td>
+                <td>{new Date(run.date).toLocaleDateString()}</td>
+                <td>{safeNumber(getRunDistance(run))} mi</td>
+                <td>{safeNumber(run.avg_pace, 1)} min/mi</td>
+                <td>{safeNumber(run.avg_hr, 0)} bpm</td>
+                <td>
+                  {(getPaceLimit(run)) ? 
+                    (() => {
+                      const paceLimit = getPaceLimit(run);
+                      const mins = Math.floor(paceLimit);
+                      const secs = Math.round((paceLimit - mins) * 60);
+                      return `${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
+                    })() : 
+                    'N/A'}
+                </td>
+                <td>
+                  <button 
+                    className="delete-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRunDeleted(run.id);
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
+        
+        {/* Add the pace improvement chart when a run is selected */}
+        {selectedRun && (
+          <PaceProgressChart 
+            runs={runs} 
+            currentRun={selectedRun} 
+          />
+        )}
       </div>
     );
   };
