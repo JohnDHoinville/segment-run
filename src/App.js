@@ -30,6 +30,7 @@ import {
 } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import PaceProgressChart from './components/PaceProgressChart';
+import HeartRatePaceCorrelation from './components/HeartRatePaceCorrelation';
 
 // Register ChartJS components
 ChartJS.register(
@@ -1382,10 +1383,20 @@ function App() {
         
         {/* Add the pace improvement chart when a run is selected */}
         {selectedRun && (
-          <PaceProgressChart 
-            runs={runs} 
-            currentRun={selectedRun} 
-          />
+          <>
+            <PaceProgressChart 
+              runs={runs} 
+              currentRun={selectedRun} 
+            />
+            
+            {/* Add heart rate correlation chart */}
+            {selectedRun.avg_hr > 0 && (
+              <HeartRatePaceCorrelation 
+                runs={runs}
+                currentRun={selectedRun}
+              />
+            )}
+          </>
         )}
       </div>
     );

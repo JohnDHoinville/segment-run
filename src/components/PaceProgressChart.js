@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Line } from 'react-chartjs-2';
+import { Line, Scatter } from 'react-chartjs-2';
+import 'chart.js/auto';  // Ensure all Chart.js components are registered
 import './PaceProgressChart.css';
 
 // Helper function to extract pace limit from a run - moved outside useMemo
@@ -155,6 +156,34 @@ const PaceProgressChart = ({ runs, currentRun }) => {
     return run.avg_pace * 1.1;
   });
   
+  // Calculate improvement metrics
+  const calculateImprovementMetrics = () => {
+    if (similarRuns.length < 2) return null;
+    
+    // Sort by date
+    const chronological = [...similarRuns].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const firstRun = chronological[0];
+    const lastRun = chronological[chronological.length - 1];
+    
+    // Calculate pace improvement
+    const paceImprovement = firstRun.avg_pace - lastRun.avg_pace;
+    const pacePercentage = (paceImprovement / firstRun.avg_pace) * 100;
+    
+    // Calculate time span
+    const firstDate = new Date(firstRun.date);
+    const lastDate = new Date(lastRun.date);
+    const daysBetween = Math.round((lastDate - firstDate) / (1000 * 60 * 60 * 24));
+    
+    return {
+      paceImprovement,
+      pacePercentage,
+      daysBetween,
+      totalRuns: similarRuns.length
+    };
+  };
+  
+  const metrics = calculateImprovementMetrics();
+  
   // Chart data
   const data = {
     labels,
@@ -252,6 +281,29 @@ const PaceProgressChart = ({ runs, currentRun }) => {
         Showing runs of {currentRun.total_distance.toFixed(1)} mi ±10% with target pace of
         {` ${Math.floor(getPaceLimit(currentRun))}:${Math.round((getPaceLimit(currentRun) % 1) * 60).toString().padStart(2, '0')}`} min/mi
       </p>
+      {metrics && (
+        <div className="improvement-metrics">
+          <div className="metric-card">
+            <div className="metric-value">{metrics.paceImprovement > 0 ? 
+              `${Math.floor(metrics.paceImprovement/1)}:${Math.round((metrics.paceImprovement % 1) * 60).toString().padStart(2, '0')}` : 
+              '0:00'}</div>
+            <div className="metric-label">Pace Improvement</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{metrics.pacePercentage > 0 ? 
+              `${metrics.pacePercentage.toFixed(1)}%` : '0%'}</div>
+            <div className="metric-label">Faster</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{metrics.daysBetween}</div>
+            <div className="metric-label">Days Tracking</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{metrics.totalRuns}</div>
+            <div className="metric-label">Similar Runs</div>
+          </div>
+        </div>
+      )}
       <div className="chart-container">
         <Line data={data} options={options} />
       </div>
@@ -259,4 +311,5 @@ const PaceProgressChart = ({ runs, currentRun }) => {
   );
 };
 
+// Export only PaceProgressChart
 export default PaceProgressChart; 
