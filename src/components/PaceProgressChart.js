@@ -88,18 +88,105 @@ const PaceProgressChart = ({ runs, currentRun }) => {
   // Format pace values (convert to seconds for better visualization)
   const paceValues = similarRuns.map(run => run.avg_pace);
   
+  // Extract fast and slow segment paces
+  const fastPaceValues = similarRuns.map(run => {
+    // Try to extract data from the run
+    let runData = run.data;
+    
+    // If data is a string, try to parse it
+    if (typeof runData === 'string') {
+      try {
+        runData = JSON.parse(runData);
+      } catch (e) {
+        console.log("Failed to parse run data:", e);
+        return run.avg_pace * 0.95; // Fallback: 5% faster than average
+      }
+    }
+    
+    // Look for fast segments to calculate average pace
+    if (runData && runData.fast_segments && runData.fast_segments.length > 0) {
+      // Calculate average of fast segment paces
+      const paces = runData.fast_segments
+        .filter(seg => seg && typeof seg === 'object' && seg.pace)
+        .map(seg => seg.pace);
+        
+      if (paces.length > 0) {
+        const avgFastPace = paces.reduce((sum, pace) => sum + pace, 0) / paces.length;
+        console.log(`Run ${run.id} fast pace: ${avgFastPace}`);
+        return avgFastPace;
+      }
+    }
+    
+    // Fallback: estimate based on average pace
+    console.log(`Run ${run.id} using estimated fast pace`);
+    return run.avg_pace * 0.95;
+  });
+  
+  const slowPaceValues = similarRuns.map(run => {
+    // Try to extract data from the run
+    let runData = run.data;
+    
+    // If data is a string, try to parse it
+    if (typeof runData === 'string') {
+      try {
+        runData = JSON.parse(runData);
+      } catch (e) {
+        console.log("Failed to parse run data:", e);
+        return run.avg_pace * 1.1; // Fallback: 10% slower than average
+      }
+    }
+    
+    // Look for slow segments to calculate average pace
+    if (runData && runData.slow_segments && runData.slow_segments.length > 0) {
+      // Calculate average of slow segment paces
+      const paces = runData.slow_segments
+        .filter(seg => seg && typeof seg === 'object' && seg.pace)
+        .map(seg => seg.pace);
+        
+      if (paces.length > 0) {
+        const avgSlowPace = paces.reduce((sum, pace) => sum + pace, 0) / paces.length;
+        console.log(`Run ${run.id} slow pace: ${avgSlowPace}`);
+        return avgSlowPace;
+      }
+    }
+    
+    // Fallback: estimate based on average pace
+    console.log(`Run ${run.id} using estimated slow pace`);
+    return run.avg_pace * 1.1;
+  });
+  
   // Chart data
   const data = {
     labels,
     datasets: [
       {
-        label: 'Average Pace (min/mi)',
+        label: 'Overall Pace',
         data: paceValues,
         fill: false,
         borderColor: '#4c9aff',
         tension: 0.1,
         pointBackgroundColor: '#2a71d0',
         pointRadius: 4,
+      },
+      {
+        label: 'Fast Segments',
+        data: fastPaceValues,
+        fill: false,
+        borderColor: '#34c759',  // Green color
+        tension: 0.1,
+        pointBackgroundColor: '#2eb855',
+        pointRadius: 3,
+        borderDash: [5, 5],  // Dashed line
+      },
+      {
+        label: 'Slow Segments',
+        data: slowPaceValues,
+        fill: false,
+        borderColor: '#ff9500',  // Orange color
+        tension: 0.1,
+        pointBackgroundColor: '#ff8000',
+        pointRadius: 3,
+        borderDash: [5, 5],  // Dashed line
       }
     ]
   };
@@ -136,13 +223,21 @@ const PaceProgressChart = ({ runs, currentRun }) => {
             const pace = context.raw;
             const mins = Math.floor(pace);
             const secs = Math.round((pace - mins) * 60);
-            return `Pace: ${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
+            return `${context.dataset.label}: ${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
           }
+        }
+      },
+      legend: {
+        display: true,
+        position: 'top',
+        labels: {
+          usePointStyle: true,
+          padding: 20
         }
       },
       title: {
         display: true,
-        text: 'Pace Improvement Over Time',
+        text: 'Pace Trends Over Time',
         font: {
           size: 18
         }
