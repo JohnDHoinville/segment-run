@@ -1238,10 +1238,40 @@ function App() {
     const [selectedRuns, setSelectedRuns] = useState([]);
     const [error, setError] = useState('');
 
+    console.log("Run history data with pace limits:", runs);
+
+    // Debug the first few runs to see exact pace_limit values
+    if (runs && runs.length > 0) {
+      console.log("First run pace_limit:", runs[0].pace_limit);
+      console.log("First run pace_limit type:", typeof runs[0].pace_limit);
+      console.log("First run data:", runs[0].data);
+    }
+
     // Sort runs by date in descending order (newest first)
     const sortedRuns = [...(runs || [])].sort((a, b) => {
       return new Date(b.date) - new Date(a.date);
     });
+
+    // Function to extract pace limit either from run.pace_limit or from run.data.pace_limit
+    const getPaceLimit = (run) => {
+      if (run.pace_limit && run.pace_limit > 0) {
+        return run.pace_limit;
+      }
+      // Try to get it from data object
+      if (run.data && typeof run.data === 'object' && run.data.pace_limit) {
+        return run.data.pace_limit;
+      }
+      // Try to parse data if it's a string
+      if (run.data && typeof run.data === 'string') {
+        try {
+          const parsed = JSON.parse(run.data);
+          if (parsed.pace_limit) return parsed.pace_limit;
+        } catch (e) {
+          // Failed to parse, ignore
+        }
+      }
+      return null;
+    };
 
     // Add safety check for missing data
     const safeNumber = (value, decimals = 2) => {
@@ -1315,6 +1345,9 @@ function App() {
           </button>
         </div>
         {error && <div className="error-message">{error}</div>}
+        <button onClick={() => window.location.reload(true)}>
+          Refresh Data
+        </button>
         <table className="history-table">
           <thead>
             <tr>
@@ -1323,6 +1356,7 @@ function App() {
               <th>Distance</th>
               <th>Avg Pace</th>
               <th>Avg HR</th>
+              <th>Target Pace</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -1347,6 +1381,16 @@ function App() {
                   <td>{safeNumber(distance)} mi</td>
                   <td>{safeNumber(run.avg_pace, 1)} min/mi</td>
                   <td>{safeNumber(run.avg_hr, 0)} bpm</td>
+                  <td>
+                    {(getPaceLimit(run)) ? 
+                      (() => {
+                        const paceLimit = getPaceLimit(run);
+                        const mins = Math.floor(paceLimit);
+                        const secs = Math.round((paceLimit - mins) * 60);
+                        return `${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
+                      })() : 
+                      'N/A'}
+                  </td>
                   <td>
                     <button 
                       className="delete-button"

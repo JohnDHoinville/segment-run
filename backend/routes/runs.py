@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from backend.app.database import RunDatabase
 from backend.app.running import analyze_run_file
+import json
 
 runs_bp = Blueprint('runs_bp', __name__)
 db = RunDatabase()
@@ -24,6 +25,10 @@ def get_runs():
     try:
         user_id = session['user_id']
         runs = db.get_all_runs(user_id)
+        # Debug: Print the first run with its pace_limit
+        if runs:
+            print(f"First run pace_limit: {runs[0].get('pace_limit')}")
+            print(f"Run pace_limit types: {[(run['id'], type(run.get('pace_limit'))) for run in runs[:3]]}")
         return jsonify(runs)
     except Exception as e:
         print(f"Error fetching runs: {str(e)}")
@@ -89,12 +94,21 @@ def analyze():
             # Build run_data to save in the runs table
             run_data = {
                 'date': run_date,
-                'data': analysis_result
+                'data': analysis_result,
+                'pace_limit': pace_limit
             }
             
             # Actually save the run
             print("\nAttempting to save run data...")
-            run_id = db.save_run(session['user_id'], run_data)
+            run_id = db.add_run(
+                user_id=session['user_id'],
+                date=datetime.now(),
+                data=json.dumps(analysis_result),
+                total_distance=analysis_result['total_distance'],
+                avg_pace=analysis_result.get('avg_pace_all'),
+                avg_hr=analysis_result.get('avg_hr_all'),
+                pace_limit=pace_limit
+            )
             print(f"Run saved successfully with ID: {run_id}")
 
             return jsonify({

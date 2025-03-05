@@ -82,6 +82,14 @@ class RunDatabase:
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             
+            # Check if pace_limit column exists
+            try:
+                cursor.execute('SELECT pace_limit FROM runs LIMIT 1')
+            except sqlite3.OperationalError:
+                print("Adding pace_limit column to runs table")
+                cursor.execute('ALTER TABLE runs ADD COLUMN pace_limit REAL')
+                conn.commit()
+            
             # First, check if we need to add new columns
             try:
                 cursor.execute('SELECT weight, gender FROM profile LIMIT 1')
@@ -231,7 +239,7 @@ class RunDatabase:
                             print(f"Error decoding JSON for run {run[0]}")
                             value = {}
                     # Ensure numeric fields have default values
-                    elif column in ['total_distance', 'avg_pace', 'avg_hr']:
+                    elif column in ['total_distance', 'avg_pace', 'avg_hr', 'pace_limit']:
                         value = float(value) if value is not None else 0.0
                     run_dict[column] = value
                 formatted_runs.append(run_dict)
@@ -358,3 +366,20 @@ class RunDatabase:
                           (new_password_hash, user_id))
             conn.commit()
             return True 
+
+    def add_run(self, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit=None):
+        """Add a new run to the database"""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO runs 
+                    (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                    VALUES 
+                    (?, ?, ?, ?, ?, ?, ?)
+                    ''', (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit))
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            print(f"Error adding run: {e}")
+            return None 
