@@ -1866,16 +1866,23 @@ function App() {
                         <InfoTooltip text="This is the pace threshold that determines fast vs. slow segments" />
                       </label>
                       <input
-                        type="number"
+                        type="text"
                         id="paceLimit"
-                        value={paceLimit || ''}
+                        value={paceLimit === 0 ? '' : paceLimit}
                         onChange={(e) => {
-                          const value = parseFloat(e.target.value);
-                          setPaceLimit(isNaN(value) ? 10.0 : value);
+                          const value = e.target.value;
+                          // Allow decimal input by accepting "." character during typing
+                          if (value === '' || value === '.') {
+                            setPaceLimit(value === '.' ? '0.' : 0);
+                          } else {
+                            const numValue = parseFloat(value);
+                            if (!isNaN(numValue)) {
+                              setPaceLimit(value.endsWith('.') ? value : numValue);
+                            }
+                          }
                         }}
-                        step="0.1"
-                        min="4"
-                        max="20"
+                        placeholder="Enter pace (e.g. 8.5)"
+                        className="form-control"
                       />
                     </div>
                     
