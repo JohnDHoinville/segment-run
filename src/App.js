@@ -31,6 +31,9 @@ import {
 import 'leaflet/dist/leaflet.css';
 import PaceProgressChart from './components/PaceProgressChart';
 import HeartRatePaceCorrelation from './components/HeartRatePaceCorrelation';
+import FatigueAnalysis from './components/FatigueAnalysis';
+import PaceConsistency from './components/PaceConsistency';
+import CustomSegments from './components/CustomSegments';
 
 // Register ChartJS components
 ChartJS.register(
@@ -715,6 +718,124 @@ const calculateAveragePace = (segments) => {
   return segments.reduce((sum, segment) => sum + segment.pace, 0) / segments.length;
 };
 
+// Add this function to your App.js file
+const safelyParseJSON = (jsonString) => {
+  try {
+    // Replace "Infinity" and "-Infinity" with string values before parsing
+    const sanitized = jsonString
+      .replace(/:Infinity,/g, ':"Infinity",')
+      .replace(/:-Infinity,/g, ':"-Infinity",')
+      .replace(/:NaN,/g, ':null,');
+    
+    return JSON.parse(sanitized, (key, value) => {
+      if (value === "Infinity") return Infinity;
+      if (value === "-Infinity") return -Infinity;
+      return value;
+    });
+  } catch (e) {
+    console.error("Error parsing JSON:", e);
+    console.log("Problematic JSON:", jsonString);
+    return null;
+  }
+};
+
+// Update the formatPace function to handle Infinity values
+const formatPace = (pace) => {
+  // Check for invalid pace values
+  if (!pace || !isFinite(pace) || pace <= 0) {
+    return "N/A"; // Return N/A for Infinity or invalid pace values
+  }
+  
+  const mins = Math.floor(pace);
+  const secs = Math.round((pace - mins) * 60);
+  return `${mins}:${secs < 10 ? '0' + secs : secs}`;
+};
+
+// Add this SafePaceDisplay component to your App.js or create a new component file
+const SafePaceDisplay = ({ pace, fallback = "N/A" }) => {
+  if (!pace || !isFinite(pace) || pace <= 0) {
+    return <span>{fallback}</span>;
+  }
+  
+  const mins = Math.floor(pace);
+  const secs = Math.round((pace - mins) * 60);
+  return <span>{mins}:{secs < 10 ? '0' + secs : secs}</span>;
+};
+
+// Modify the extractPaceValue function to add more debugging and better handling for slow pace
+const extractPaceValue = (results, paceType) => {
+  if (!results) return null;
+  
+  // For debugging
+  if (paceType === 'slow') {
+    console.log("Slow pace extraction:", {
+      avg_pace_slow: results.avg_pace_slow,
+      slow_pace: results.slow_pace,
+      slow_segments: results.slow_segments,
+      slow_distance: results.slow_distance,
+      slow_time: results.slow_time
+    });
+    
+    // If we have slow_time and slow_distance, calculate pace directly
+    if (isFinite(results.slow_time) && isFinite(results.slow_distance) && results.slow_distance > 0) {
+      const calculatedPace = results.slow_time / results.slow_distance;
+      console.log("Calculated slow pace from time/distance:", calculatedPace);
+      if (isFinite(calculatedPace) && calculatedPace > 0) {
+        return calculatedPace;
+      }
+    }
+  }
+  
+  // Existing logic
+  if (paceType === 'fast') {
+    if (isFinite(results.avg_pace_fast)) return results.avg_pace_fast;
+    if (isFinite(results.fast_pace)) return results.fast_pace;
+    
+    // Calculate from segments if available
+    if (results.fast_segments && results.fast_segments.length > 0) {
+      return calculateAveragePace(results.fast_segments);
+    }
+  } else if (paceType === 'slow') {
+    if (isFinite(results.avg_pace_slow)) return results.avg_pace_slow;
+    if (isFinite(results.slow_pace)) return results.slow_pace;
+    
+    // Calculate from segments if available
+    if (results.slow_segments && results.slow_segments.length > 0) {
+      const segmentPaces = results.slow_segments
+        .map(s => s.pace)
+        .filter(pace => isFinite(pace) && pace > 0);
+      
+      if (segmentPaces.length > 0) {
+        const avgPace = segmentPaces.reduce((sum, pace) => sum + pace, 0) / segmentPaces.length;
+        console.log("Calculated slow pace from segments:", avgPace);
+        return avgPace;
+      }
+    }
+    
+    // Last resort - if we have overall pace and fast pace, estimate slow pace
+    if (isFinite(results.avg_pace_all) && isFinite(results.avg_pace_fast) &&
+        isFinite(results.total_distance) && isFinite(results.fast_distance)) {
+          
+      const slowDistance = results.total_distance - results.fast_distance;
+      if (slowDistance > 0) {
+        const totalTime = results.avg_pace_all * results.total_distance;
+        const fastTime = results.avg_pace_fast * results.fast_distance;
+        const slowTime = totalTime - fastTime;
+        const slowPace = slowTime / slowDistance;
+        
+        console.log("Estimated slow pace from overall and fast pace:", slowPace);
+        return slowPace;
+      }
+    }
+  } else if (paceType === 'overall') {
+    if (isFinite(results.avg_pace_all)) return results.avg_pace_all;
+    if (isFinite(results.avg_pace)) return results.avg_pace;
+    if (isFinite(results.pace)) return results.pace;
+  }
+  
+  return null; // Return null if no valid pace found
+};
+
 function App() {
   const API_URL = 'http://localhost:5001';
 
@@ -744,7 +865,8 @@ function App() {
         credentials: 'include'
       });
       if (response.ok) {
-        const data = await response.json();
+        const text = await response.text();
+        const data = safelyParseJSON(text);
         console.log('Run history data:', data);  // Debug log
         setRunHistory(data);
       }
@@ -878,51 +1000,61 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setSaveStatus('');
-    setError('');
-
-    if (!selectedFile) {
-      setError('Please select a file');
-      setLoading(false);
-      return;
-    }
-
-    console.log('Uploading file:', selectedFile.name);
-    console.log('File size:', selectedFile.size);
-    console.log('File type:', selectedFile.type);
-    console.log('Form data:', {
-      paceLimit,
-      age,
-      restingHR
-    });
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('paceLimit', paceLimit || 10);
-    formData.append('age', age || 0);
-    formData.append('restingHR', restingHR || 0);
-
+    setError(null);
+    setResults(null);
+    
     try {
-      console.log('Sending request to:', `${API_URL}/analyze`);
+      if (!selectedFile) {
+        setError('Please select a file');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Uploading file:', selectedFile.name);
+      console.log('File size:', selectedFile.size);
+      console.log('File type:', selectedFile.type);
+      console.log('Form data:', {
+        paceLimit,
+        age,
+        restingHR
+      });
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('paceLimit', paceLimit || 10);
+      formData.append('age', age || 0);
+      formData.append('restingHR', restingHR || 0);
+
+      console.log("Sending request to:", `${API_URL}/analyze`);
       const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         credentials: 'include',
         body: formData
       });
-
-      console.log('Response status:', response.status);
-      const responseData = await response.json();
-      console.log('Response data:', responseData);
-
-      if (!response.ok) {
-        console.error('Server error:', responseData);
-        throw new Error(responseData.error || 'Failed to analyze run');
+      
+      console.log("Response status:", response.status);
+      
+      if (response.ok) {
+        const text = await response.text();
+        const data = safelyParseJSON(text);
+        
+        if (data) {
+          console.log('Analysis results received:', data);
+          
+          // The analysis data is nested inside the 'data' property
+          setResults(data.data);  // Make sure we're setting the right property
+          
+          setSaveStatus(data.saved ? 'Run saved successfully!' : 'Run analyzed but not saved');
+          
+          // Fetch updated run history after saving
+          fetchRunHistory();
+        } else {
+          setError("Failed to parse response data");
+        }
+      } else {
+        console.error('Server error:', await response.json());
+        throw new Error(response.statusText || 'Failed to analyze run');
       }
-
-      console.log('Analysis results:', responseData);
-      console.log('Training zones:', responseData.data?.training_zones);
-      setResults(responseData.data);
-      setSaveStatus(responseData.saved ? 'Run saved successfully!' : 'Run analyzed but not saved');
     } catch (error) {
       console.error('Error:', error);
       setError(error.message || 'Failed to analyze run');
@@ -1396,6 +1528,18 @@ function App() {
                 currentRun={selectedRun}
               />
             )}
+            
+            {/* Add fatigue analysis */}
+            <FatigueAnalysis run={selectedRun} />
+            
+            {/* Add pace consistency analysis */}
+            <PaceConsistency run={selectedRun} />
+            
+            {/* Add custom segments analysis */}
+            <CustomSegments
+              runs={runs}
+              currentRun={selectedRun}
+            />
           </>
         )}
       </div>
@@ -1642,6 +1786,28 @@ function App() {
     return (value || 0).toFixed(decimals);
   };
 
+  // Add this in your App.js component (after setting results)
+  useEffect(() => {
+    if (results) {
+      console.log("Full results object:", results);
+      
+      // Analyze pace data structure
+      const paceFields = Object.keys(results).filter(key => 
+        key.toLowerCase().includes('pace') || 
+        (Array.isArray(results[key]) && results[key][0] && 'pace' in results[key][0])
+      );
+      console.log("Pace-related fields:", paceFields);
+      
+      // Log segment structure if available
+      if (results.fast_segments) {
+        console.log("Fast segment example:", results.fast_segments[0]);
+      }
+      if (results.slow_segments) {
+        console.log("Slow segment example:", results.slow_segments[0]);
+      }
+    }
+  }, [results]);
+
   return (
     <ThemeProvider>
       <TableProvider>
@@ -1747,7 +1913,7 @@ function App() {
                         <div className="avg-pace">
                           <p className="result-label">Average Pace</p>
                           <p className="result-value-secondary">
-                            {formatTime(calculateAveragePace(results?.fast_segments || []))}
+                            {formatPace(extractPaceValue(results, 'fast'))}
                           </p>
                           <p className="result-unit">/mile</p>
                         </div>
@@ -1763,7 +1929,7 @@ function App() {
                         <div className="avg-pace">
                           <p className="result-label">Average Pace</p>
                           <p className="result-value-secondary">
-                            {formatTime(calculateAveragePace(results?.slow_segments || []))}
+                            {formatPace(extractPaceValue(results, 'slow'))}
                           </p>
                           <p className="result-unit">/mile</p>
                         </div>
@@ -1820,7 +1986,7 @@ function App() {
                               <tr key={index}>
                                 <td>{index + 1}</td>
                                 <td>{formatNumber(split.distance)} mi</td>
-                                <td>{formatTime(split.pace)} /mi</td>
+                                <td>{formatPace(split.pace)} /mi</td>
                                 <td>{formatNumber(split.avg_hr, 0)} bpm</td>
                               </tr>
                             ))}
@@ -1854,8 +2020,8 @@ function App() {
                                 <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
                                 <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
                                 <td>{formatNumber(segment.distance)} mi</td>
-                                <td>{formatTime(segment.pace)} /mi</td>
-                                <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
+                                <td>{formatPace(segment.pace)} /mi</td>
+                                <td>{segment.best_pace ? formatPace(segment.best_pace) : formatPace(segment.pace)} /mi</td>
                                 <td>{formatNumber(segment.avg_hr)} bpm</td>
                               </tr>
                             ))}
@@ -1886,8 +2052,8 @@ function App() {
                                 <td>{new Date(segment.start_time).toLocaleTimeString()}</td>
                                 <td>{new Date(segment.end_time).toLocaleTimeString()}</td>
                                 <td>{formatNumber(segment.distance)} mi</td>
-                                <td>{formatTime(segment.pace)} /mi</td>
-                                <td>{segment.best_pace ? formatTime(segment.best_pace) : formatTime(segment.pace)} /mi</td>
+                                <td>{formatPace(segment.pace)} /mi</td>
+                                <td>{segment.best_pace ? formatPace(segment.best_pace) : formatPace(segment.pace)} /mi</td>
                                 <td>{formatNumber(segment.avg_hr)} bpm</td>
                               </tr>
                             ))}

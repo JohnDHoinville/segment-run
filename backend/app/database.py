@@ -10,6 +10,8 @@ class DateTimeEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.strftime('%Y-%m-%d %H:%M:%S')
+        if isinstance(obj, float) and (obj == float('inf') or obj == float('-inf') or obj != obj):
+            return str(obj)  # Convert Infinity, -Infinity and NaN to strings
         return super().default(obj)
 
 class RunDatabase:
