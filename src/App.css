@@ -1653,3 +1653,33 @@ tr:hover {
   background-color: var(--accent-primary);
   color: white;
 }
+
+/* Custom segments styling */
+.custom-segments-container {
+  background-color: white;
+  border-radius: 10px;
+  padding: 2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.custom-segments-container h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.segment-description {
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+}
+
+/* Dark mode adjustments for custom segments */
+.dark .custom-segments-container {
+  background-color: var(--bg-secondary);
+}
+
+.dark .segment-description {
+  color: var(--text-secondary);
+}

@@ -2459,12 +2459,29 @@ function App() {
 
                 {/* Run History Section */}
                 {!compareMode ? (
-                  <RunHistory 
-                    runs={runHistory} 
-                    onRunDeleted={handleRunDeleted}
-                    onCompareRuns={(selectedRuns) => handleCompareRuns(selectedRuns)}
-                    setResults={setResults}
-                  />
+                  <>
+                    <RunHistory 
+                      runs={runHistory} 
+                      onRunDeleted={handleRunDeleted}
+                      onCompareRuns={(selectedRuns) => handleCompareRuns(selectedRuns)}
+                      setResults={setResults}
+                    />
+                    
+                    {/* Custom Segments Comparison */}
+                    {runHistory && runHistory.length > 0 && (
+                      <div className="custom-segments-container">
+                        <h2>Custom Segment Comparison</h2>
+                        <p className="segment-description">
+                          Create and analyze custom segments across all your runs.
+                          Define segments based on distance ranges and compare your performance.
+                        </p>
+                        <CustomSegments 
+                          runs={runHistory}
+                          currentRun={results}
+                        />
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <RunComparison 
                     runs={comparedRuns}
