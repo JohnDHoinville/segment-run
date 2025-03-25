@@ -1435,3 +1435,123 @@ tr:hover {
   color: #888;
   font-style: normal;
 }
+
+/* Analysis Section Styling */
+.results-summary {
+  margin-bottom: 2rem;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.analysis-section {
+  margin-bottom: 2rem;
+  background-color: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  color: #333;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 0.75rem;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.result-item {
+  padding: 1.25rem;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.result-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.result-value-secondary {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #444;
+  margin: 0.25rem 0;
+}
+
+.table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.splits-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.splits-table th {
+  background-color: #f5f5f5;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #444;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.splits-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.dark .analysis-section {
+  background-color: #252525;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.dark .section-title {
+  color: #e0e0e0;
+  border-bottom-color: #3a3a3a;
+}
+
+.dark .results-summary {
+  background-color: #2a2a2a;
+}
+
+.dark .result-item {
+  background-color: #333;
+}
+
+.dark .result-value,
+.dark .result-value-secondary {
+  color: #f0f0f0;
+}
+
+.dark .splits-table th {
+  background-color: #333;
+  color: #e0e0e0;
+  border-bottom-color: #444;
+}
+
+.dark .splits-table td {
+  border-bottom-color: #3a3a3a;
+}
+
+/* Mile splits section message */

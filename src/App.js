@@ -848,6 +848,152 @@ const extractPaceValue = (results, paceType) => {
   return null; // Return null if no valid pace found
 };
 
+// Add this helper function to find mile splits from results
+const findMileSplits = (results) => {
+  // Function to detect if an array contains mile splits
+  const isMileSplitsArray = (arr) => {
+    if (!Array.isArray(arr) || arr.length === 0) return false;
+    // Check if first item has typical mile split properties
+    const firstItem = arr[0];
+    return typeof firstItem === 'object' && 
+           (firstItem.mile !== undefined || firstItem.split_number !== undefined) &&
+           (firstItem.split_time !== undefined || firstItem.time !== undefined || 
+            firstItem.split_pace !== undefined || firstItem.pace !== undefined);
+  };
+  
+  // Search for any array that looks like mile splits
+  const findMileSplitsArray = (obj, path = '') => {
+    if (!obj || typeof obj !== 'object') return null;
+    
+    // Direct check for mile_splits property
+    if (obj.mile_splits && isMileSplitsArray(obj.mile_splits)) {
+      return obj.mile_splits;
+    }
+    
+    // Check if this object itself is an array of mile splits
+    if (Array.isArray(obj) && isMileSplitsArray(obj)) {
+      return obj;
+    }
+    
+    // Recursively search nested properties
+    for (const key in obj) {
+      if (obj[key] && typeof obj[key] === 'object') {
+        const found = findMileSplitsArray(obj[key], `${path}.${key}`);
+        if (found) return found;
+      }
+    }
+    
+    return null;
+  };
+  
+  // Try to find mile splits in the results object
+  let mileSplitsData = findMileSplitsArray(results);
+  
+  // If no mile splits found, generate them from segments
+  if (!mileSplitsData || mileSplitsData.length === 0) {
+    // Combine fast and slow segments
+    const allSegments = [
+      ...(results.fast_segments || []),
+      ...(results.slow_segments || [])
+    ].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    
+    if (allSegments.length > 0 && results.total_distance) {
+      // Generate approximate mile splits
+      const syntheticSplits = [];
+      
+      let currentMileDistance = 0;
+      let currentMileTime = 0;
+      let currentMileHR = 0;
+      let hrPointsCount = 0;
+      let mileIndex = 1;
+      
+      // Process each segment to build up mile splits
+      allSegments.forEach(segment => {
+        const segmentDistance = segment.distance || 0;
+        const remainingMileDistance = 1.0 - currentMileDistance;
+        
+        if (segmentDistance <= remainingMileDistance) {
+          // Segment fits entirely within current mile
+          currentMileDistance += segmentDistance;
+          currentMileTime += segmentDistance * segment.pace;
+          if (segment.avg_hr) {
+            currentMileHR += segment.avg_hr;
+            hrPointsCount++;
+          }
+        } else {
+          // Segment crosses mile boundary
+          // First, add contribution to current mile
+          currentMileTime += remainingMileDistance * segment.pace;
+          
+          if (segment.avg_hr) {
+            currentMileHR += segment.avg_hr;
+            hrPointsCount++;
+          }
+          
+          // Create current mile split
+          syntheticSplits.push({
+            mile: mileIndex,
+            split_time: currentMileTime,
+            split_pace: currentMileTime / 1.0, // Pace for exactly 1.0 miles
+            avg_hr: hrPointsCount > 0 ? currentMileHR / hrPointsCount : 0
+          });
+          
+          // Reset for next mile
+          mileIndex++;
+          const distanceUsed = remainingMileDistance;
+          const distanceRemaining = segmentDistance - distanceUsed;
+          
+          // Process any complete miles within this segment
+          const wholeMiles = Math.floor(distanceRemaining);
+          if (wholeMiles > 0) {
+            for (let i = 0; i < wholeMiles; i++) {
+              syntheticSplits.push({
+                mile: mileIndex,
+                split_time: segment.pace, // Time for exactly 1.0 miles at this pace
+                split_pace: segment.pace,
+                avg_hr: segment.avg_hr || 0
+              });
+              mileIndex++;
+            }
+          }
+          
+          // Start a new partial mile with any remaining distance
+          const leftover = distanceRemaining - wholeMiles;
+          if (leftover > 0) {
+            currentMileDistance = leftover;
+            currentMileTime = leftover * segment.pace;
+            currentMileHR = segment.avg_hr || 0;
+            hrPointsCount = segment.avg_hr ? 1 : 0;
+          } else {
+            currentMileDistance = 0;
+            currentMileTime = 0;
+            currentMileHR = 0;
+            hrPointsCount = 0;
+          }
+        }
+      });
+      
+      // Add final partial mile if there's enough data
+      if (currentMileDistance > 0.2) { // Only add if at least 0.2 miles
+        syntheticSplits.push({
+          mile: mileIndex,
+          split_time: currentMileTime,
+          split_pace: currentMileTime / currentMileDistance,
+          avg_hr: hrPointsCount > 0 ? currentMileHR / hrPointsCount : 0,
+          partial: true,
+          distance: currentMileDistance
+        });
+      }
+      
+      if (syntheticSplits.length > 0) {
+        mileSplitsData = syntheticSplits;
+      }
+    }
+  }
+  
+  return mileSplitsData;
+};
+
 function App() {
   const API_URL = 'http://localhost:5001';
 
@@ -1988,279 +2134,123 @@ function App() {
                   <div className="results">
                     <h2>Analysis Results</h2>
                     
-                    <div className="results-grid">
-                      <div className="result-item">
-                        <h3>Total Distance</h3>
-                        <p className="result-value">{formatNumber(results?.total_distance || 0)}</p>
-                        <p className="result-unit">miles</p>
-                        <div className="hr-item">
-                          <p className="result-label">Overall Heart Rate</p>
-                          <p className="result-value-secondary">{formatNumber(results?.avg_hr_all || 0, 0)}</p>
-                          <p className="result-unit">bpm</p>
+                    {/* Summary metrics section with cleaner grid layout */}
+                    <div className="results-summary">
+                      <div className="results-grid">
+                        <div className="result-item">
+                          <h3>Total Distance</h3>
+                          <p className="result-value">{formatNumber(results?.total_distance || 0)}</p>
+                          <p className="result-unit">miles</p>
+                          <div className="hr-item">
+                            <p className="result-label">Overall Heart Rate</p>
+                            <p className="result-value-secondary">{formatNumber(results?.avg_hr_all || 0, 0)}</p>
+                            <p className="result-unit">bpm</p>
+                          </div>
                         </div>
-                      </div>
-                      
-                      <div className="result-item">
-                        <h3>Fast Distance</h3>
-                        <p className="result-value">{formatNumber(results?.fast_distance || 0)}</p>
-                        <p className="result-unit">miles</p>
-                        <p className="result-percentage">
-                          ({formatNumber(results?.percentage_fast || 0, 1)}% of total)
-                        </p>
-                        <div className="avg-pace">
-                          <p className="result-label">Average Pace</p>
-                          <p className="result-value-secondary">
-                            {formatPace(extractPaceValue(results, 'fast'))}
+                        
+                        <div className="result-item">
+                          <h3>Fast Distance</h3>
+                          <p className="result-value">{formatNumber(results?.fast_distance || 0)}</p>
+                          <p className="result-unit">miles</p>
+                          <p className="result-percentage">
+                            ({formatNumber(results?.percentage_fast || 0, 1)}% of total)
                           </p>
-                          <p className="result-unit">/mile</p>
+                          <div className="avg-pace">
+                            <p className="result-label">Average Pace</p>
+                            <p className="result-value-secondary">
+                              {formatPace(extractPaceValue(results, 'fast'))}
+                            </p>
+                            <p className="result-unit">/mile</p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="result-item">
-                        <h3>Slow Distance</h3>
-                        <p className="result-value">{formatNumber(results?.slow_distance || 0)}</p>
-                        <p className="result-unit">miles</p>
-                        <p className="result-percentage">
-                          ({formatNumber(results?.percentage_slow || 0, 1)}% of total)
-                        </p>
-                        <div className="avg-pace">
-                          <p className="result-label">Average Pace</p>
-                          <p className="result-value-secondary">
-                            {formatPace(extractPaceValue(results, 'slow'))}
+                        <div className="result-item">
+                          <h3>Slow Distance</h3>
+                          <p className="result-value">{formatNumber(results?.slow_distance || 0)}</p>
+                          <p className="result-unit">miles</p>
+                          <p className="result-percentage">
+                            ({formatNumber(results?.percentage_slow || 0, 1)}% of total)
                           </p>
-                          <p className="result-unit">/mile</p>
+                          <div className="avg-pace">
+                            <p className="result-label">Average Pace</p>
+                            <p className="result-value-secondary">
+                              {formatPace(extractPaceValue(results, 'slow'))}
+                            </p>
+                            <p className="result-unit">/mile</p>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="segments">
-                      {console.log("Results object:", results)}
-                      {console.log("Training zones:", results?.training_zones)}
-                      
+                    {/* Training zones section with clean card styling */}
+                    <div className="analysis-section">
+                      <h3 className="section-title">Training Zones</h3>
                       {results?.training_zones && (
-                        console.log("Attempting to render training zones") ||
                         <TrainingZones zones={results.training_zones} />
                       )}
+                    </div>
 
-                      <h3>Route Map</h3>
+                    {/* Route map with proper section styling */}
+                    <div className="analysis-section">
+                      <h3 className="section-title">Route Map</h3>
                       <RouteMap 
                         routeData={results?.route_data || []} 
                         fastSegments={results?.fast_segments || []} 
                         slowSegments={results?.slow_segments || []} 
                       />
-                      
-                      {results && results.pace_zones && (
-                        <PaceAnalysis 
-                          results={results}
-                          paceZones={results.pace_zones}
-                          elevationImpact={results.elevation_impact}
-                        />
-                      )}
-
-                      {/* Add the AdvancedMetrics component */}
-                      <AdvancedMetrics 
-                        vo2max={results.vo2max}
-                        trainingLoad={results.training_load}
-                        recoveryTime={results.recovery_time}
-                      />
-
-                      {/* Mile Splits section */}
-                      <div className="mile-splits-section">
-                        <h3>Mile Splits</h3>
-                        {(() => {
-                          console.log("DEBUG - Attempting to find mile splits in:", results);
-                          
-                          // Function to detect if an array contains mile splits
-                          const isMileSplitsArray = (arr) => {
-                            if (!Array.isArray(arr) || arr.length === 0) return false;
-                            // Check if first item has typical mile split properties
-                            const firstItem = arr[0];
-                            return typeof firstItem === 'object' && 
-                                   (firstItem.mile !== undefined || firstItem.split_number !== undefined) &&
-                                   (firstItem.split_time !== undefined || firstItem.time !== undefined || 
-                                    firstItem.split_pace !== undefined || firstItem.pace !== undefined);
-                          };
-                          
-                          // Search for any array that looks like mile splits
-                          const findMileSplitsArray = (obj, path = '') => {
-                            if (!obj || typeof obj !== 'object') return null;
-                            
-                            // Direct check for mile_splits property
-                            if (obj.mile_splits && isMileSplitsArray(obj.mile_splits)) {
-                              console.log(`Found mile_splits at ${path}.mile_splits:`, obj.mile_splits);
-                              return obj.mile_splits;
-                            }
-                            
-                            // Check if this object itself is an array of mile splits
-                            if (Array.isArray(obj) && isMileSplitsArray(obj)) {
-                              console.log(`Found mile splits array at ${path}:`, obj);
-                              return obj;
-                            }
-                            
-                            // Recursively search nested properties
-                            for (const key in obj) {
-                              if (obj[key] && typeof obj[key] === 'object') {
-                                const found = findMileSplitsArray(obj[key], `${path}.${key}`);
-                                if (found) return found;
-                              }
-                            }
-                            
-                            return null;
-                          };
-                          
-                          // Try to find mile splits in the results object
-                          let mileSplitsData = findMileSplitsArray(results, 'results');
-                          
-                          // If no mile splits found, generate them from segments
-                          if (!mileSplitsData || mileSplitsData.length === 0) {
-                            console.log("No mile splits found, generating from segments");
-                            
-                            // Combine fast and slow segments
-                            const allSegments = [
-                              ...(results.fast_segments || []),
-                              ...(results.slow_segments || [])
-                            ].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-                            
-                            if (allSegments.length > 0 && results.total_distance) {
-                              // Generate approximate mile splits
-                              const totalMiles = Math.floor(results.total_distance);
-                              const syntheticSplits = [];
-                              
-                              let currentMileDistance = 0;
-                              let currentMileTime = 0;
-                              let currentMileHR = 0;
-                              let hrPointsCount = 0;
-                              let mileIndex = 1;
-                              
-                              // Process each segment to build up mile splits
-                              allSegments.forEach(segment => {
-                                const segmentDistance = segment.distance || 0;
-                                const remainingMileDistance = 1.0 - currentMileDistance;
-                                
-                                if (segmentDistance <= remainingMileDistance) {
-                                  // Segment fits entirely within current mile
-                                  currentMileDistance += segmentDistance;
-                                  currentMileTime += segmentDistance * segment.pace;
-                                  if (segment.avg_hr) {
-                                    currentMileHR += segment.avg_hr;
-                                    hrPointsCount++;
-                                  }
-                                } else {
-                                  // Segment crosses mile boundary
-                                  // First, add contribution to current mile
-                                  const fractionForCurrentMile = remainingMileDistance / segmentDistance;
-                                  currentMileTime += remainingMileDistance * segment.pace;
-                                  
-                                  if (segment.avg_hr) {
-                                    currentMileHR += segment.avg_hr;
-                                    hrPointsCount++;
-                                  }
-                                  
-                                  // Create current mile split
-                                  syntheticSplits.push({
-                                    mile: mileIndex,
-                                    split_time: currentMileTime,
-                                    split_pace: currentMileTime / 1.0, // Pace for exactly 1.0 miles
-                                    avg_hr: hrPointsCount > 0 ? currentMileHR / hrPointsCount : 0
-                                  });
-                                  
-                                  // Reset for next mile
-                                  mileIndex++;
-                                  const distanceUsed = remainingMileDistance;
-                                  const distanceRemaining = segmentDistance - distanceUsed;
-                                  
-                                  // Process any complete miles within this segment
-                                  const wholeMiles = Math.floor(distanceRemaining);
-                                  if (wholeMiles > 0) {
-                                    for (let i = 0; i < wholeMiles; i++) {
-                                      syntheticSplits.push({
-                                        mile: mileIndex,
-                                        split_time: segment.pace, // Time for exactly 1.0 miles at this pace
-                                        split_pace: segment.pace,
-                                        avg_hr: segment.avg_hr || 0
-                                      });
-                                      mileIndex++;
-                                    }
-                                  }
-                                  
-                                  // Start a new partial mile with any remaining distance
-                                  const leftover = distanceRemaining - wholeMiles;
-                                  if (leftover > 0) {
-                                    currentMileDistance = leftover;
-                                    currentMileTime = leftover * segment.pace;
-                                    currentMileHR = segment.avg_hr || 0;
-                                    hrPointsCount = segment.avg_hr ? 1 : 0;
-                                  } else {
-                                    currentMileDistance = 0;
-                                    currentMileTime = 0;
-                                    currentMileHR = 0;
-                                    hrPointsCount = 0;
-                                  }
-                                }
-                              });
-                              
-                              // Add final partial mile if there's enough data
-                              if (currentMileDistance > 0.2) { // Only add if at least 0.2 miles
-                                syntheticSplits.push({
-                                  mile: mileIndex,
-                                  split_time: currentMileTime,
-                                  split_pace: currentMileTime / currentMileDistance,
-                                  avg_hr: hrPointsCount > 0 ? currentMileHR / hrPointsCount : 0,
-                                  partial: true,
-                                  distance: currentMileDistance
-                                });
-                              }
-                              
-                              if (syntheticSplits.length > 0) {
-                                console.log("Generated synthetic mile splits:", syntheticSplits);
-                                mileSplitsData = syntheticSplits;
-                              }
-                            }
-                          }
-                          
-                          if (mileSplitsData && mileSplitsData.length > 0) {
-                            console.log("Found mile splits data:", mileSplitsData);
-                            return (
-                              <div className="table-container">
-                                <table className="splits-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Mile #</th>
-                                      <th>Split Time</th>
-                                      <th>Pace</th>
-                                      <th>Heart Rate</th>
+                    </div>
+                    
+                    {/* Mile splits with consistent styling */}
+                    <div className="analysis-section">
+                      <h3 className="section-title">Mile Splits</h3>
+                      {(() => {
+                        // Find or generate mile splits data
+                        const mileSplitsData = findMileSplits(results);
+                        
+                        if (mileSplitsData && mileSplitsData.length > 0) {
+                          return (
+                            <div className="table-container">
+                              <table className="splits-table">
+                                <thead>
+                                  <tr>
+                                    <th>Mile #</th>
+                                    <th>Split Time</th>
+                                    <th>Pace</th>
+                                    <th>Heart Rate</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {mileSplitsData.map((split, index) => (
+                                    <tr key={index}>
+                                      <td>
+                                        {split.mile || split.split_number || index + 1}
+                                        {split.partial && ` (${split.distance.toFixed(2)} mi)`}
+                                      </td>
+                                      <td>{formatTime(split.split_time || split.time || 0)}</td>
+                                      <td>{formatPace(split.pace || split.split_pace || 0)} min/mi</td>
+                                      <td>{Math.round(split.avg_hr || split.hr || 0)} bpm</td>
                                     </tr>
-                                  </thead>
-                                  <tbody>
-                                    {mileSplitsData.map((split, index) => (
-                                      <tr key={index}>
-                                        <td>
-                                          {split.mile || split.split_number || index + 1}
-                                          {split.partial && ` (${split.distance.toFixed(2)} mi)`}
-                                        </td>
-                                        <td>{formatTime(split.split_time || split.time || 0)}</td>
-                                        <td>{formatPace(split.pace || split.split_pace || 0)} min/mi</td>
-                                        <td>{Math.round(split.avg_hr || split.hr || 0)} bpm</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            );
-                          } else {
-                            // Generate a message to explain why no splits are shown
-                            console.log("No mile splits data found or generated.");
-                            return (
-                              <div className="no-splits-message">
-                                Mile splits data not available for this run. 
-                                <p className="no-splits-explanation">
-                                  Mile splits are generated during analysis and may not be available for all runs.
-                                </p>
-                              </div>
-                            );
-                          }
-                        })()}
-                      </div>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="no-splits-message">
+                              Mile splits data not available for this run. 
+                              <p className="no-splits-explanation">
+                                Mile splits are generated during analysis and may not be available for all runs.
+                              </p>
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                    
+                    {/* Segments section */}
+                    <div className="analysis-section">
+                      <h3 className="section-title">Segments Analysis</h3>
                       
                       <CollapsibleTable 
                         title={`Fast Segments (${results?.fast_segments?.length || 0})`}
@@ -2325,12 +2315,37 @@ function App() {
                           </tbody>
                         </table>
                       </CollapsibleTable>
-
-                      {/* Add Race Predictions */}
-                      {results?.race_predictions && (
-                        <RacePredictions predictions={results.race_predictions} />
-                      )}
                     </div>
+
+                    {/* Advanced metrics section */}
+                    <div className="analysis-section">
+                      <h3 className="section-title">Advanced Metrics</h3>
+                      <AdvancedMetrics 
+                        vo2max={results.vo2max}
+                        trainingLoad={results.training_load}
+                        recoveryTime={results.recovery_time}
+                      />
+                    </div>
+
+                    {/* Race predictions section */}
+                    {results?.race_predictions && (
+                      <div className="analysis-section">
+                        <h3 className="section-title">Race Predictions</h3>
+                        <RacePredictions predictions={results.race_predictions} />
+                      </div>
+                    )}
+                    
+                    {/* Additional pace analysis if available */}
+                    {results && results.pace_zones && (
+                      <div className="analysis-section">
+                        <h3 className="section-title">Pace Analysis</h3>
+                        <PaceAnalysis 
+                          results={results}
+                          paceZones={results.pace_zones}
+                          elevationImpact={results.elevation_impact}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </main>
