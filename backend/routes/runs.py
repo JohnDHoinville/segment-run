@@ -205,17 +205,35 @@ def analyze():
         print("File size:", os.path.getsize(temp_path))
         
         try:
-            analysis_result = analyze_run_file(temp_path, pace_limit, age, resting_hr, weight=profile.get('weight', 70))
+            # Pass age, resting_hr, weight, and gender to analyze_run_file
+            analysis_result = analyze_run_file(
+                temp_path, 
+                pace_limit, 
+                user_age=age, 
+                resting_hr=resting_hr, 
+                weight=profile.get('weight', 70),
+                gender=profile.get('gender', 1)
+            )
             print("\nAnalysis completed successfully.")
+            
+            # Log advanced metrics to verify they exist in analysis_result
+            print("\nAdvanced metrics in analysis_result:")
+            print(f"VO2 Max: {analysis_result.get('vo2max')}")
+            print(f"Training Load: {analysis_result.get('training_load')}")
+            print(f"Recovery Time: {analysis_result.get('recovery_time')}")
+            print(f"Training Zones: {analysis_result.get('training_zones') is not None}")
 
             # Save the run to database
+            # Ensure analysis_result is encoded properly to preserve all metrics
+            encoded_data = json.dumps(analysis_result, cls=CustomJSONEncoder)
+            
             run_id = db.add_run(
                 user_id=session['user_id'],
                 date=run_date,
-                data=json.dumps(analysis_result, cls=CustomJSONEncoder),  # Use custom encoder here
+                data=encoded_data,
                 total_distance=analysis_result['total_distance'],
-                avg_pace=analysis_result.get('avg_pace_all'),
-                avg_hr=analysis_result.get('avg_hr_all'),
+                avg_pace=analysis_result.get('avg_pace_all', 0),
+                avg_hr=analysis_result.get('avg_hr_all', 0),
                 pace_limit=pace_limit
             )
             print(f"Run saved successfully with ID: {run_id}")
@@ -243,4 +261,108 @@ def analyze():
     except Exception as e:
         print(f"\nServer error in /analyze route:")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+@runs_bp.route('/run/<int:run_id>/analysis', methods=['GET'])
+def get_run_analysis(run_id):
+    """
+    Fetch the full analysis data for a specific run.
+    
+    This endpoint allows users to view previously performed analyses
+    without having to re-analyze the GPX file.
+    """
+    # Check authentication
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    try:
+        # Get the run directly using the RunDatabase API
+        run = db.get_run(run_id, user_id)
+        
+        if not run:
+            return jsonify({'error': 'Run not found or access denied'}), 404
+        
+        # Parse the data JSON
+        try:
+            # Get the data as a Python object
+            if isinstance(run['data'], str):
+                run_data = json.loads(run['data'])
+            else:
+                run_data = run['data']
+            
+            # Log what's being retrieved for debugging
+            print(f"\nRetrieving run analysis for run_id: {run_id}")
+            print(f"Advanced metrics in retrieved data:")
+            print(f"VO2 Max: {run_data.get('vo2max')}")
+            print(f"Training Load: {run_data.get('training_load')}")
+            print(f"Recovery Time: {run_data.get('recovery_time')}")
+            print(f"Training Zones: {run_data.get('training_zones') is not None}")
+            
+            # If advanced metrics are missing, try to recalculate them
+            if not run_data.get('vo2max') or not run_data.get('training_load') or not run_data.get('recovery_time'):
+                print("Advanced metrics missing, adding defaults to prevent UI errors")
+                
+                # Add placeholder metrics if missing
+                profile = db.get_profile(user_id)
+                
+                if not run_data.get('vo2max'):
+                    # Estimate VO2max using available data
+                    if profile and 'age' in profile and 'weight' in profile and run_data.get('avg_hr_all') and run_data.get('total_distance'):
+                        from app.running import calculate_vo2max
+                        avg_hr = run_data.get('avg_hr_all', 0)
+                        max_hr = run_data.get('max_hr', 220 - profile.get('age', 30))
+                        avg_pace = run_data.get('avg_pace_all', 0) or run_data.get('avg_pace', 0)
+                        
+                        run_data['vo2max'] = calculate_vo2max(
+                            avg_hr=avg_hr,
+                            max_hr=max_hr,
+                            avg_pace=avg_pace,
+                            user_age=profile.get('age', 30),
+                            gender=profile.get('gender', 1)
+                        )
+                        print(f"Added calculated VO2max: {run_data['vo2max']}")
+                
+                if not run_data.get('training_load'):
+                    # Estimate training load using available data
+                    if run_data.get('avg_hr_all') and run_data.get('total_distance'):
+                        from app.running import calculate_training_load
+                        # Estimate duration from distance and pace
+                        avg_pace = run_data.get('avg_pace_all', 0) or run_data.get('avg_pace', 0)
+                        duration_minutes = run_data.get('total_distance', 0) * avg_pace
+                        
+                        resting_hr = profile.get('resting_hr', 60) if profile else 60
+                        max_hr = run_data.get('max_hr', 220 - profile.get('age', 30))
+                        
+                        run_data['training_load'] = calculate_training_load(
+                            duration_minutes=duration_minutes,
+                            avg_hr=run_data.get('avg_hr_all', 0),
+                            resting_hr=resting_hr,
+                            max_hr=max_hr
+                        )
+                        print(f"Added calculated training load: {run_data['training_load']}")
+                
+                if not run_data.get('recovery_time') and run_data.get('training_load'):
+                    # Estimate recovery time based on training load
+                    from app.running import calculate_recovery_time
+                    run_data['recovery_time'] = calculate_recovery_time(
+                        training_load=run_data.get('training_load', 0)
+                    )
+                    print(f"Added calculated recovery time: {run_data['recovery_time']}")
+            
+            # Return the full analysis data with updates
+            return safe_json_dumps({
+                'message': 'Analysis data retrieved successfully',
+                'run_id': run['id'],
+                'date': run['date'],
+                'pace_limit': run['pace_limit'],
+                **run_data  # Unpack all the analysis data
+            }), 200
+            
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid run data format'}), 500
+            
+    except Exception as e:
+        print(f"Error retrieving run analysis: {str(e)}")
+        traceback.print_exc()  # Add detailed stack trace for debugging
+        return jsonify({'error': 'Failed to retrieve analysis data'}), 500 

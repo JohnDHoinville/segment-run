@@ -408,3 +408,44 @@ class RunDatabase:
         except Exception as e:
             print(f"Error adding run: {e}")
             return None 
+
+    def get_run(self, run_id, user_id):
+        """Get a specific run by ID and verify it belongs to the user"""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit FROM runs WHERE id = ? AND user_id = ?",
+                    (run_id, user_id)
+                )
+                run = cursor.fetchone()
+                
+                if not run:
+                    return None
+                
+                # Convert to dictionary with column names
+                run_dict = {
+                    'id': run[0],
+                    'user_id': run[1],
+                    'date': run[2],
+                    'data': run[3],
+                    'total_distance': run[4],
+                    'avg_pace': run[5],
+                    'avg_hr': run[6],
+                    'pace_limit': run[7]
+                }
+                
+                # Try to parse the JSON data
+                if run_dict['data'] and isinstance(run_dict['data'], str):
+                    try:
+                        run_dict['data'] = json.loads(run_dict['data'])
+                    except json.JSONDecodeError:
+                        # Keep as string if can't be parsed
+                        pass
+                
+                return run_dict
+            
+        except Exception as e:
+            print(f"Error getting run: {e}")
+            traceback.print_exc()
+            return None 
