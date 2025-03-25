@@ -628,7 +628,20 @@ const comparisonChartOptions = {
   }
 };
 
-// Add this utility function at the top of the file
+// Format pace from decimal minutes to mm:ss display
+const formatPace = (pace) => {
+  if (!pace) return 'N/A';
+  try {
+    const mins = Math.floor(pace);
+    const secs = Math.round((pace - mins) * 60);
+    return `${mins}:${secs < 10 ? '0' + secs : secs}`;
+  } catch (e) {
+    console.error('Error formatting pace:', e);
+    return 'N/A';
+  }
+};
+
+// Format time minutes to hh:mm display
 const formatTime = (minutes) => {
   const hours = Math.floor(minutes / 60);
   const mins = Math.floor(minutes % 60);
@@ -737,18 +750,6 @@ const safelyParseJSON = (jsonString) => {
     console.log("Problematic JSON:", jsonString);
     return null;
   }
-};
-
-// Update the formatPace function to handle Infinity values
-const formatPace = (pace) => {
-  // Check for invalid pace values
-  if (!pace || !isFinite(pace) || pace <= 0) {
-    return "N/A"; // Return N/A for Infinity or invalid pace values
-  }
-  
-  const mins = Math.floor(pace);
-  const secs = Math.round((pace - mins) * 60);
-  return `${mins}:${secs < 10 ? '0' + secs : secs}`;
 };
 
 // Add this SafePaceDisplay component to your App.js or create a new component file
@@ -1532,17 +1533,12 @@ function App() {
                     </td>
                     <td>{new Date(run.date).toLocaleDateString()}</td>
                     <td>{safeNumber(getRunDistance(run))} mi</td>
-                    <td>{safeNumber(run.avg_pace, 1)} min/mi</td>
+                    <td>
+                      {formatPace(run.avg_pace)} min/mi
+                    </td>
                     <td>{safeNumber(run.avg_hr, 0)} bpm</td>
                     <td>
-                      {(getPaceLimit(run)) ? 
-                        (() => {
-                          const paceLimit = getPaceLimit(run);
-                          const mins = Math.floor(paceLimit);
-                          const secs = Math.round((paceLimit - mins) * 60);
-                          return `${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
-                        })() : 
-                        'N/A'}
+                      {getPaceLimit(run) ? `${formatPace(getPaceLimit(run))} min/mi` : 'N/A'}
                     </td>
                     <td>
                       {fastSegments.length > 0 ? (
