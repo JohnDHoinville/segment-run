@@ -202,6 +202,17 @@ const RunHistory = () => {
                     const heartRate = run?.avg_hr 
                         ? Math.round(Number(run.avg_hr)) 
                         : null;
+                    
+                    // Extract fast segments information
+                    let fastSegments = [];
+                    try {
+                        // Access fast_segments from data object
+                        if (run.data && run.data.fast_segments && Array.isArray(run.data.fast_segments)) {
+                            fastSegments = run.data.fast_segments;
+                        }
+                    } catch (e) {
+                        console.error(`Error processing fast segments for run ${runId}:`, e);
+                    }
                         
                     return (
                         <div key={runId} className="run-item">
@@ -209,6 +220,24 @@ const RunHistory = () => {
                             <p>Distance: {distance} miles</p>
                             <p>Average Pace: {pace} min/mile</p>
                             {heartRate && <p>Average Heart Rate: {heartRate} bpm</p>}
+                            
+                            {/* Fast segments section */}
+                            {fastSegments.length > 0 && (
+                                <div className="fast-segments">
+                                    <h4>Fast Segments</h4>
+                                    {fastSegments.map((segment, i) => {
+                                        const segmentDistance = segment.distance ? 
+                                            Number(segment.distance).toFixed(2) : '0';
+                                        const segmentPace = formatPace(segment.pace);
+                                        
+                                        return (
+                                            <div key={i} className="segment-item">
+                                                <p>Segment {i+1}: {segmentDistance} miles at {segmentPace} min/mile</p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     );
                 })}

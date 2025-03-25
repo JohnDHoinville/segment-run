@@ -1466,50 +1466,133 @@ function App() {
               <th>Avg Pace</th>
               <th>Avg HR</th>
               <th>Target Pace</th>
+              <th>Fast Summary</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {sortedRuns.map(run => (
-              <tr 
-                key={run.id} 
-                onClick={() => handleRowClick(run.id)} 
-                className={selectedRunId === run.id ? 'selected-run' : ''}
-              >
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedRunId === run.id}
-                    onChange={(e) => e.stopPropagation()}
-                  />
-                </td>
-                <td>{new Date(run.date).toLocaleDateString()}</td>
-                <td>{safeNumber(getRunDistance(run))} mi</td>
-                <td>{safeNumber(run.avg_pace, 1)} min/mi</td>
-                <td>{safeNumber(run.avg_hr, 0)} bpm</td>
-                <td>
-                  {(getPaceLimit(run)) ? 
-                    (() => {
-                      const paceLimit = getPaceLimit(run);
-                      const mins = Math.floor(paceLimit);
-                      const secs = Math.round((paceLimit - mins) * 60);
-                      return `${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
-                    })() : 
-                    'N/A'}
-                </td>
-                <td>
-                  <button 
-                    className="delete-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRunDeleted(run.id);
-                    }}
+            {sortedRuns.map(run => {
+              // Extract fast segments from run data
+              let fastSegments = [];
+              try {
+                // Access fast_segments from data object
+                const runData = typeof run.data === 'string' ? JSON.parse(run.data) : run.data;
+                if (runData && runData.fast_segments && Array.isArray(runData.fast_segments)) {
+                  fastSegments = runData.fast_segments;
+                }
+              } catch (e) {
+                console.error(`Error processing fast segments for run ${run.id}:`, e);
+              }
+              
+              // Calculate average fast pace and total fast distance
+              let avgFastPace = 0;
+              let totalFastDistance = 0;
+              
+              if (fastSegments.length > 0) {
+                // Sum up all fast segment distances
+                totalFastDistance = fastSegments.reduce((sum, segment) => {
+                  return sum + (typeof segment.distance === 'number' ? segment.distance : 0);
+                }, 0);
+                
+                // Calculate weighted average pace (weighted by distance)
+                const totalWeightedPace = fastSegments.reduce((sum, segment) => {
+                  const distance = typeof segment.distance === 'number' ? segment.distance : 0;
+                  const pace = typeof segment.pace === 'number' ? segment.pace : 0;
+                  return sum + (distance * pace);
+                }, 0);
+                
+                avgFastPace = totalFastDistance > 0 ? totalWeightedPace / totalFastDistance : 0;
+              }
+              
+              // Format functions
+              const formatPace = (pace) => {
+                if (!pace) return 'N/A';
+                try {
+                  const mins = Math.floor(pace);
+                  const secs = Math.round((pace - mins) * 60);
+                  return `${mins}:${secs < 10 ? '0' + secs : secs}`;
+                } catch (e) {
+                  console.error('Error formatting pace:', e);
+                  return 'N/A';
+                }
+              };
+              
+              return (
+                <React.Fragment key={run.id}>
+                  <tr 
+                    onClick={() => handleRowClick(run.id)} 
+                    className={selectedRunId === run.id ? 'selected-run' : ''}
                   >
-                    🗑️
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedRunId === run.id}
+                        onChange={(e) => e.stopPropagation()}
+                      />
+                    </td>
+                    <td>{new Date(run.date).toLocaleDateString()}</td>
+                    <td>{safeNumber(getRunDistance(run))} mi</td>
+                    <td>{safeNumber(run.avg_pace, 1)} min/mi</td>
+                    <td>{safeNumber(run.avg_hr, 0)} bpm</td>
+                    <td>
+                      {(getPaceLimit(run)) ? 
+                        (() => {
+                          const paceLimit = getPaceLimit(run);
+                          const mins = Math.floor(paceLimit);
+                          const secs = Math.round((paceLimit - mins) * 60);
+                          return `${mins}:${secs < 10 ? '0' + secs : secs} min/mi`;
+                        })() : 
+                        'N/A'}
+                    </td>
+                    <td>
+                      {fastSegments.length > 0 ? (
+                        <div className="fast-summary">
+                          <span className="fast-distance">{totalFastDistance.toFixed(2)} mi</span>
+                          <span className="fast-pace">@ {formatPace(avgFastPace)} min/mi</span>
+                        </div>
+                      ) : 'None'}
+                    </td>
+                    <td>
+                      <button 
+                        className="delete-button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRunDeleted(run.id);
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                  
+                  {/* Show fast segments when run is selected */}
+                  {selectedRunId === run.id && fastSegments.length > 0 && (
+                    <tr className="fast-segments-row">
+                      <td colSpan="7">
+                        <div className="fast-segments-container">
+                          <h4>Fast Segments</h4>
+                          <div className="segments-list">
+                            {fastSegments.map((segment, i) => {
+                              const segmentDistance = segment.distance ? 
+                                Number(segment.distance).toFixed(2) : '0';
+                              const segmentPace = formatPace(segment.pace);
+                              
+                              return (
+                                <div key={i} className="segment-item">
+                                  <span className="segment-number">Segment {i+1}:</span>
+                                  <span className="segment-distance">{segmentDistance} miles</span>
+                                  <span className="segment-pace">at {segmentPace} min/mile</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
         
