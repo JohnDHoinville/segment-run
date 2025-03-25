@@ -3,14 +3,81 @@ import { API_URL } from '../config';
 import './RunHistory.css';
 
 const RunHistory = () => {
-    console.log('RunHistory rendering'); // Debug log
+    // IMPORTANT: Initialize runs as an empty array, never null or undefined
     const [runs, setRuns] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // Ensure runs is always an array, even if state somehow gets corrupted
+    const safeRuns = Array.isArray(runs) ? runs : [];
+
     useEffect(() => {
+        let isMounted = true;
+        
+        // Safely pre-process and parse JSON that might contain Infinity values
+        const safelyParseJSON = (jsonText) => {
+            try {
+                if (!jsonText || typeof jsonText !== 'string') {
+                    console.error('Invalid JSON input:', jsonText);
+                    return [];
+                }
+                
+                // First approach: Regular expression to replace all instances of Infinity/NaN as unquoted literals
+                let processed = jsonText
+                    .replace(/"pace"\s*:\s*Infinity/g, '"pace":"Infinity"')
+                    .replace(/"pace"\s*:\s*-Infinity/g, '"pace":"-Infinity"')
+                    .replace(/"pace"\s*:\s*NaN/g, '"pace":"NaN"')
+                    .replace(/:\s*Infinity/g, ':"Infinity"')
+                    .replace(/:\s*-Infinity/g, ':"-Infinity"')
+                    .replace(/:\s*NaN/g, ':"NaN"');
+                    
+                try {
+                    // Try parsing the pre-processed JSON
+                    return JSON.parse(processed);
+                } catch (e) {
+                    console.error('First approach failed:', e);
+                    
+                    // Second approach: More aggressive replacements
+                    processed = jsonText
+                        .replace(/Infinity/g, '"Infinity"')
+                        .replace(/-Infinity/g, '"-Infinity"')
+                        .replace(/NaN/g, '"NaN"')
+                        // Fix double quotes that might have been introduced
+                        .replace(/""/g, '"');
+                        
+                    try {
+                        return JSON.parse(processed);
+                    } catch (e2) {
+                        console.error('Second approach failed:', e2);
+                        
+                        // Last resort: Try a completely different approach
+                        // Convert everything that looks like a JSON object to a JS object
+                        try {
+                            // Using Function constructor as a last resort (safe in this context)
+                            const jsObj = new Function('return ' + jsonText.replace(/Infinity/g, '"Infinity"').replace(/-Infinity/g, '"-Infinity"').replace(/NaN/g, '"NaN"'))();
+                            return jsObj;
+                        } catch (e3) {
+                            console.error('All approaches failed. Returning empty array.');
+                            console.log('Problematic JSON:', jsonText.substring(0, 500) + '...');
+                            return [];
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Fatal JSON parsing error:', e);
+                return [];
+            }
+        };
+
         const fetchRuns = async () => {
-            console.log('Fetching runs...'); // Debug log
+            console.log('Fetching runs...'); 
+            
+            // Always start with a known good state
+            if (isMounted) {
+                setLoading(true);
+                setError(null);
+            }
+            
             try {
                 const response = await fetch(`${API_URL}/runs`, {
                     method: 'GET',
@@ -21,72 +88,131 @@ const RunHistory = () => {
                     }
                 });
 
-                console.log('Response status:', response.status); // Debug log
                 if (!response.ok) {
                     throw new Error(`Failed to fetch runs: ${response.status}`);
                 }
 
-                const data = await response.json();
-                console.log('Received data type:', typeof data); // Debug log
-                console.log('Is data array?', Array.isArray(data)); // Debug log
+                // Safely parse JSON with error handling
+                let data;
+                try {
+                    const text = await response.text();
+                    console.log('Raw response:', text.substring(0, 100) + "...");
+                    
+                    // Ensure we're parsing valid JSON
+                    if (!text || text.trim() === '') {
+                        console.warn('Empty response from server');
+                        data = [];
+                    } else {
+                        data = safelyParseJSON(text);
+                    }
+                } catch (jsonError) {
+                    console.error('Error parsing JSON:', jsonError);
+                    throw new Error('Invalid response format from server');
+                }
+
+                console.log('Received data:', data?.length);
+                console.log('Data type:', typeof data);
+                console.log('Is array:', Array.isArray(data));
                 
-                // Ensure we're working with an array
-                const runsArray = Array.isArray(data) ? data : [];
-                console.log('Processed runs count:', runsArray.length); // Debug log
+                // Super defensive data handling
+                let processedRuns = [];
                 
-                setRuns(runsArray);
+                // Check various possible formats and convert to array
+                if (Array.isArray(data)) {
+                    processedRuns = data;
+                } else if (data && typeof data === 'object') {
+                    if (data.runs && Array.isArray(data.runs)) {
+                        processedRuns = data.runs;
+                    } else {
+                        // Try to convert object to array as last resort
+                        try {
+                            processedRuns = Object.values(data);
+                        } catch (e) {
+                            console.error('Failed to convert object to array:', e);
+                            processedRuns = [];
+                        }
+                    }
+                }
+                
+                console.log('Processed runs count:', processedRuns.length);
+                console.log('Is processed array:', Array.isArray(processedRuns));
+                
+                // Set state only if component is still mounted
+                if (isMounted) {
+                    // CRITICAL: Ensure we're setting an array
+                    setRuns(Array.isArray(processedRuns) ? processedRuns : []);
+                    setError(null);
+                }
             } catch (err) {
                 console.error('Error fetching runs:', err);
-                setError(err.message);
-                setRuns([]); // Ensure we set an empty array on error
+                // Set state only if component is still mounted
+                if (isMounted) {
+                    setError(err.message);
+                    // CRITICAL: Set runs to empty array on error, never null or undefined
+                    setRuns([]);
+                }
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchRuns();
+        
+        // Cleanup function to prevent state updates on unmounted component
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
-    // Add debug logs for state
-    console.log('Current state:', { 
-        runs: runs, 
-        isArray: Array.isArray(runs),
-        length: runs?.length,
-        loading, 
-        error 
-    }); // Debug log
-
+    // Render loading state
     if (loading) {
         return <div className="loading-indicator">Loading runs history...</div>;
     }
 
+    // Render error state
     if (error) {
         return <div className="error-message">Error: {error}</div>;
     }
 
-    // Defensive check before rendering
-    if (!Array.isArray(runs)) {
-        console.error('runs is not an array:', runs); // Debug log
-        return <div className="error-message">Error: Invalid data format received from server</div>;
+    // Render empty state
+    if (!Array.isArray(safeRuns) || safeRuns.length === 0) {
+        return (
+            <div className="run-history-container">
+                <h2>Run History</h2>
+                <p className="no-runs-message">No runs found. Upload a GPX file to get started!</p>
+            </div>
+        );
     }
 
+    // Only get here if safeRuns is definitely an array with items
     return (
         <div className="run-history-container">
             <h2>Run History</h2>
-            {runs.length > 0 ? (
-                <div className="runs-list">
-                    {runs.map(run => (
-                        <div key={run.id} className="run-item">
-                            <h3>Run on {run.date}</h3>
-                            <p>Distance: {run.total_distance?.toFixed(2) || 0} miles</p>
-                            <p>Average Pace: {formatPace(run.avg_pace)} min/mile</p>
-                            {run.avg_hr && <p>Average Heart Rate: {Math.round(run.avg_hr)} bpm</p>}
+            <div className="runs-list">
+                {safeRuns.map((run, index) => {
+                    // More defensive checks for each run item
+                    const runId = run?.id || index;
+                    const date = run?.date || 'Unknown Date';
+                    const distance = (run?.total_distance !== undefined) 
+                        ? Number(run.total_distance).toFixed(2) 
+                        : '0';
+                    const pace = formatPace(run?.avg_pace);
+                    const heartRate = run?.avg_hr 
+                        ? Math.round(Number(run.avg_hr)) 
+                        : null;
+                        
+                    return (
+                        <div key={runId} className="run-item">
+                            <h3>Run on {date}</h3>
+                            <p>Distance: {distance} miles</p>
+                            <p>Average Pace: {pace} min/mile</p>
+                            {heartRate && <p>Average Heart Rate: {heartRate} bpm</p>}
                         </div>
-                    ))}
-                </div>
-            ) : (
-                <p className="no-runs-message">No runs found. Upload a GPX file to get started!</p>
-            )}
+                    );
+                })}
+            </div>
         </div>
     );
 };
@@ -94,9 +220,17 @@ const RunHistory = () => {
 // Helper function to format pace (seconds to min:sec)
 const formatPace = (paceInSeconds) => {
     if (!paceInSeconds) return '0:00';
-    const minutes = Math.floor(paceInSeconds / 60);
-    const seconds = Math.floor(paceInSeconds % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    try {
+        const paceNum = Number(paceInSeconds);
+        if (isNaN(paceNum)) return '0:00';
+        
+        const minutes = Math.floor(paceNum / 60);
+        const seconds = Math.floor(paceNum % 60);
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    } catch (e) {
+        console.error('Error formatting pace:', e);
+        return '0:00';
+    }
 };
 
 export default RunHistory; 

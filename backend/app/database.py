@@ -6,13 +6,36 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
 from json import JSONEncoder
 
-class DateTimeEncoder(JSONEncoder):
+# Add a proper JSON encoder for Infinity values
+class SafeJSONEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.strftime('%Y-%m-%d %H:%M:%S')
-        if isinstance(obj, float) and (obj == float('inf') or obj == float('-inf') or obj != obj):
-            return str(obj)  # Convert Infinity, -Infinity and NaN to strings
         return super().default(obj)
+        
+    def encode(self, obj):
+        # Pre-process the object to handle special values
+        def handle_special_values(item):
+            if isinstance(item, float):
+                if item == float('inf') or item == float('Infinity'):
+                    return "Infinity"
+                if item == float('-inf') or item == float('-Infinity'):
+                    return "-Infinity"
+                if item != item:  # Check for NaN
+                    return "NaN"
+            elif isinstance(item, dict):
+                return {k: handle_special_values(v) for k, v in item.items()}
+            elif isinstance(item, list):
+                return [handle_special_values(i) for i in item]
+            return item
+            
+        # Process the entire object tree
+        processed_obj = handle_special_values(obj)
+        return super().encode(processed_obj)
+
+# Use this instead of the regular JSON encoder
+def safe_json_dumps(obj):
+    return json.dumps(obj, cls=SafeJSONEncoder)
 
 class RunDatabase:
     def __init__(self, db_name='runs.db'):
@@ -175,7 +198,7 @@ class RunDatabase:
                 avg_hr = data_obj.get('avg_hr_all', 0)
                 
                 # Convert data to string if it's not already
-                data_str = json.dumps(data_obj, cls=DateTimeEncoder) if isinstance(data_obj, dict) else data_obj
+                data_str = json.dumps(data_obj, cls=SafeJSONEncoder) if isinstance(data_obj, dict) else data_obj
                 
                 print("Values to insert:", {
                     'user_id': user_id,
