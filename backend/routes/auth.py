@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session
 import traceback
-from backend.app.database import RunDatabase
+from app.database import RunDatabase
 from werkzeug.security import generate_password_hash, check_password_hash
 
 auth_bp = Blueprint('auth_bp', __name__)

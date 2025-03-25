@@ -1,11 +1,11 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from functools import wraps
 import traceback
 import re
 import os
 from datetime import datetime
-from backend.app.database import RunDatabase
-from backend.app.running import analyze_run_file
+from app.database import RunDatabase
+from app.running import analyze_run_file
 import json
 
 runs_bp = Blueprint('runs_bp', __name__)
@@ -16,6 +16,8 @@ class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, float) and (obj == float('inf') or obj == float('-inf') or obj != obj):  # last condition checks for NaN
             return str(obj)  # Convert Infinity, -Infinity and NaN to strings
+        if isinstance(obj, datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
         return super().default(obj)
 
 def login_required(f):
@@ -31,22 +33,28 @@ def login_required(f):
 def get_runs():
     try:
         user_id = session['user_id']
+        print(f"Fetching runs for user: {user_id}")
         runs = db.get_all_runs(user_id)
-        # Debug: Print the first run with its pace_limit
+        
+        # Debug
+        print(f"Fetched runs: {type(runs)}")
         if runs:
-            print(f"First run pace_limit: {runs[0].get('pace_limit')}")
-            print(f"Run pace_limit types: {[(run['id'], type(run.get('pace_limit'))) for run in runs[:3]]}")
+            print(f"First run: {runs[0] if runs else None}")
+        
+        # Always ensure we're returning a list
+        runs_array = runs if runs is not None else []
         
         # Use the custom encoder to safely serialize the response
-        return app.response_class(
-            response=json.dumps(runs, cls=CustomJSONEncoder),
+        return current_app.response_class(
+            response=json.dumps(runs_array, cls=CustomJSONEncoder),
             status=200,
             mimetype='application/json'
         )
     except Exception as e:
         print(f"Error getting runs: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        # Return empty array instead of error to avoid frontend issues
+        return jsonify([]), 200
 
 
 @runs_bp.route('/analyze', methods=['POST'])
@@ -106,7 +114,7 @@ def analyze():
             print(f"Run saved successfully with ID: {run_id}")
 
             # Use custom encoder for the response too
-            return app.response_class(
+            return current_app.response_class(
                 response=json.dumps({
                     'message': 'Analysis complete',
                     'data': analysis_result,

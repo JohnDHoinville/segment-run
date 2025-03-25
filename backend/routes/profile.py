@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 import traceback
 from functools import wraps
-from backend.app.database import RunDatabase
+from app.database import RunDatabase
 
 profile_bp = Blueprint('profile_bp', __name__)
 db = RunDatabase()

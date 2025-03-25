@@ -3,8 +3,8 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
 import os
-from backend.app.database import RunDatabase
-from backend.app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
+from app.database import RunDatabase
+from app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
 import json
 from datetime import datetime
 import re
@@ -12,9 +12,9 @@ from functools import wraps
 import secrets
 import traceback
 from json import JSONEncoder
-from backend.routes.auth import auth_bp
-from backend.routes.runs import runs_bp
-from backend.routes.profile import profile_bp
+from routes.auth import auth_bp
+from routes.runs import runs_bp
+from routes.profile import profile_bp
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -176,48 +176,6 @@ def analyze():
         print("Full traceback:")
         traceback.print_exc()
         return jsonify({'error': f'Server error: {str(e)}'}), 500
-
-@app.route('/runs', methods=['GET'])
-@login_required
-def get_runs():
-    try:
-        print("Fetching runs for user:", session['user_id'])
-        print("Session data:", dict(session))
-        runs = db.get_all_runs(session['user_id'])
-        print(f"Raw runs from database:", runs)
-        
-        # Format runs for frontend
-        formatted_runs = []
-        for run in runs:
-            try:
-                # Ensure data is parsed JSON
-                run_data = run['data']
-                print(f"Processing run {run['id']}, data type:", type(run_data))
-                if isinstance(run_data, str):
-                    run_data = json.loads(run_data)
-                
-                # Create formatted run object
-                formatted_run = {
-                    'id': run['id'],
-                    'date': run['date'],
-                    'data': run_data,
-                    'total_distance': run['total_distance'],
-                    'avg_pace': run['avg_pace'],
-                    'avg_hr': run['avg_hr']
-                }
-                print(f"Formatted run:", formatted_run)
-                formatted_runs.append(formatted_run)
-            except Exception as e:
-                print(f"Error formatting run {run['id']}: {str(e)}")
-                traceback.print_exc()
-                continue
-        
-        print(f"Returning {len(formatted_runs)} formatted runs")
-        return jsonify(formatted_runs)
-    except Exception as e:
-        print(f"Error getting runs: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/compare', methods=['POST'])
 @login_required
