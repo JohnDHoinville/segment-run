@@ -101,7 +101,11 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
     fetch(`${API_URL}/profile`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
-        setEditWeight(data.weight?.toString() || '70');
+        // Ensure weight is in pounds (backend might store in kg)
+        const weightInPounds = data.weight_unit === 'kg' ? 
+          Math.round(data.weight * 2.20462) : 
+          data.weight;
+        setEditWeight(weightInPounds?.toString() || '160');
         setEditGender(data.gender?.toString() || '1');
       });
   }, [age, restingHR]);
@@ -133,6 +137,7 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
           age: parseInt(editAge),
           resting_hr: parseInt(editRestingHR),
           weight: parseFloat(editWeight),
+          weight_unit: 'lbs', // Explicitly specify weight is in pounds
           gender: parseInt(editGender)
         }),
       });
@@ -250,6 +255,10 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   <span className="stat-label">Current Resting HR</span>
                   <span className="stat-value">{restingHR || 'Not set'} {restingHR && 'bpm'}</span>
                 </div>
+                <div className="stat-item">
+                  <span className="stat-label">Current Weight</span>
+                  <span className="stat-value">{editWeight || 'Not set'} {editWeight && 'lbs'}</span>
+                </div>
               </div>
 
               <div className="form-group">
@@ -285,7 +294,9 @@ const ProfileMenu = ({ username, age, restingHR, onSave, onLogout }) => {
                   id="weight"
                   value={editWeight}
                   onChange={(e) => setEditWeight(e.target.value)}
-                  placeholder="Enter your weight in lbs"
+                  min="50"
+                  max="400"
+                  placeholder="Enter your weight in pounds"
                 />
               </div>
 
