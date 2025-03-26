@@ -1828,6 +1828,7 @@ function App() {
                 <th>Date</th>
                 <th>Distance</th>
                 <th>Target Pace</th>
+                <th>Heart Rate</th>
                 <th>Fast Segments</th>
                 <th>Actions</th>
               </tr>
@@ -1888,6 +1889,36 @@ function App() {
                         
                         // Otherwise format the pace
                         return formatPace(paceLimit);
+                      })()}
+                    </td>
+                    <td>
+                      {(() => {
+                        // Extract heart rate with defensive coding
+                        let heartRate = null;
+                        
+                        // Try direct property
+                        if (run.avg_hr !== undefined && run.avg_hr !== null) {
+                          heartRate = run.avg_hr;
+                        }
+                        // Try data object
+                        else if (run.data) {
+                          if (typeof run.data === 'object' && run.data !== null) {
+                            heartRate = run.data.avg_hr_all || run.data.avg_hr;
+                          } else if (typeof run.data === 'string') {
+                            try {
+                              const parsedData = JSON.parse(run.data);
+                              heartRate = parsedData.avg_hr_all || parsedData.avg_hr;
+                            } catch (e) {
+                              console.error("Error parsing run data for heart rate:", e);
+                            }
+                          }
+                        }
+                        
+                        // Format and return
+                        if (heartRate !== null && heartRate !== undefined && heartRate > 0) {
+                          return `${Math.round(heartRate)} bpm`;
+                        }
+                        return 'N/A';
                       })()}
                     </td>
                     <td>
@@ -1988,7 +2019,7 @@ function App() {
                   </tr>
                   {expandedRows[run.id] && (
                     <tr className="fast-segments-row">
-                      <td colSpan="6">
+                      <td colSpan="7">
                         <div className="fast-segments-container">
                           <h4>Fast Segments</h4>
                           {loadingStates[run.id] ? (
