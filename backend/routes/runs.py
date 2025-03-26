@@ -5,7 +5,7 @@ import re
 import os
 from datetime import datetime
 from app.database import RunDatabase, safe_json_dumps
-from app.running import analyze_run_file
+from app.running import analyze_run_file, calculate_vo2max, calculate_training_load, calculate_recovery_time
 import json
 
 runs_bp = Blueprint('runs_bp', __name__)
@@ -60,29 +60,50 @@ def get_runs():
     With extreme safety measures to ensure a valid JSON array is always returned
     """
     try:
-        user_id = session.get('user_id')
-        print(f"Fetching runs for user: {user_id}")
+        print(f"\n=== Getting runs for user {session['user_id']} ===")
+        runs = db.get_all_runs(session['user_id'])
         
-        # Extra safety: verify user_id exists
-        if not user_id:
-            print("WARNING: No user_id in session")
+        # 1. Basic validation - ensure we have a list
+        if not runs:
+            print("No runs found")
             return jsonify([])
             
-        # Get runs from database with error handling
-        try:
-            runs = db.get_all_runs(user_id)
-        except Exception as db_error:
-            print(f"Database error: {str(db_error)}")
-            traceback.print_exc()
-            # Return empty array on DB error
-            return jsonify([])
+        # 2. Debug info about the runs
+        print(f"Found {len(runs)} runs")
         
-        # Debug logging
-        print(f"Fetched runs type: {type(runs)}")
-        print(f"Is runs array? {isinstance(runs, list)}")
+        # Log a sample run to verify structure
         if runs:
-            print(f"Runs count: {len(runs) if hasattr(runs, '__len__') else 'unknown'}")
-            print(f"First run: {runs[0] if isinstance(runs, list) and runs else None}")
+            sample_run = runs[0]
+            print("\nSample run structure:")
+            print(f"ID: {sample_run.get('id')}")
+            print(f"Date: {sample_run.get('date')}")
+            print(f"Total Distance: {sample_run.get('total_distance')}")
+            print(f"Pace Limit: {sample_run.get('pace_limit')}")
+            
+            # Check pace_limit specifically since that's our issue
+            pace_limit = sample_run.get('pace_limit')
+            print(f"Pace Limit Type: {type(pace_limit).__name__}")
+            print(f"Pace Limit Value: {pace_limit}")
+            
+            # Debug the runs data specifically
+            if 'data' in sample_run:
+                data_type = type(sample_run['data']).__name__
+                print(f"Data field type: {data_type}")
+                
+                # If data is an object, check if it has pace_limit
+                if isinstance(sample_run['data'], dict):
+                    data_pace_limit = sample_run['data'].get('pace_limit')
+                    print(f"Data.pace_limit: {data_pace_limit}")
+                    print(f"Data.pace_limit type: {type(data_pace_limit).__name__ if data_pace_limit is not None else 'None'}")
+        
+        # Modify each run to ensure pace_limit is available directly
+        for run in runs:
+            # Make sure pace_limit is directly accessible
+            if ('pace_limit' not in run or run['pace_limit'] is None or run['pace_limit'] == 0) and 'data' in run:
+                data = run['data']
+                if isinstance(data, dict) and 'pace_limit' in data:
+                    run['pace_limit'] = data['pace_limit']
+                    print(f"Set direct pace_limit for run {run.get('id')} to {run['pace_limit']}")
         
         # CRITICAL: Ensure we're working with a list/array
         safe_runs = []
@@ -223,10 +244,19 @@ def analyze():
             print(f"Recovery Time: {analysis_result.get('recovery_time')}")
             print(f"Training Zones: {analysis_result.get('training_zones') is not None}")
 
-            # Save the run to database
+            # Add detailed debug logging to see what exactly is being saved
+            print("\n=== SAVING RUN DATA ===")
+            print(f"Advanced metrics being saved:")
+            print(f"VO2 Max: {analysis_result.get('vo2max')}")
+            print(f"Training Load: {analysis_result.get('training_load')}")
+            print(f"Recovery Time: {analysis_result.get('recovery_time')}")
+            
             # Ensure analysis_result is encoded properly to preserve all metrics
             encoded_data = json.dumps(analysis_result, cls=CustomJSONEncoder)
             
+            # Debug log the full encoded data (truncated for readability)
+            print(f"Encoded data sample: {encoded_data[:100]}...")
+
             run_id = db.add_run(
                 user_id=session['user_id'],
                 date=run_date,
@@ -299,6 +329,18 @@ def get_run_analysis(run_id):
             print(f"Recovery Time: {run_data.get('recovery_time')}")
             print(f"Training Zones: {run_data.get('training_zones') is not None}")
             
+            # Ensure all metrics are available at top level of response
+            response_data = {
+                'message': 'Analysis data retrieved successfully',
+                'run_id': run['id'],
+                'date': run['date'],
+                'pace_limit': run['pace_limit'],
+            }
+
+            # Copy all run_data properties into response_data
+            for key, value in run_data.items():
+                response_data[key] = value
+            
             # If advanced metrics are missing, try to recalculate them
             if not run_data.get('vo2max') or not run_data.get('training_load') or not run_data.get('recovery_time'):
                 print("Advanced metrics missing, adding defaults to prevent UI errors")
@@ -309,24 +351,25 @@ def get_run_analysis(run_id):
                 if not run_data.get('vo2max'):
                     # Estimate VO2max using available data
                     if profile and 'age' in profile and 'weight' in profile and run_data.get('avg_hr_all') and run_data.get('total_distance'):
-                        from app.running import calculate_vo2max
                         avg_hr = run_data.get('avg_hr_all', 0)
                         max_hr = run_data.get('max_hr', 220 - profile.get('age', 30))
                         avg_pace = run_data.get('avg_pace_all', 0) or run_data.get('avg_pace', 0)
                         
-                        run_data['vo2max'] = calculate_vo2max(
+                        calculated_vo2max = calculate_vo2max(
                             avg_hr=avg_hr,
                             max_hr=max_hr,
                             avg_pace=avg_pace,
                             user_age=profile.get('age', 30),
                             gender=profile.get('gender', 1)
                         )
-                        print(f"Added calculated VO2max: {run_data['vo2max']}")
+                        # Set in both places
+                        run_data['vo2max'] = calculated_vo2max
+                        response_data['vo2max'] = calculated_vo2max
+                        print(f"Added calculated VO2max: {calculated_vo2max}")
                 
                 if not run_data.get('training_load'):
                     # Estimate training load using available data
                     if run_data.get('avg_hr_all') and run_data.get('total_distance'):
-                        from app.running import calculate_training_load
                         # Estimate duration from distance and pace
                         avg_pace = run_data.get('avg_pace_all', 0) or run_data.get('avg_pace', 0)
                         duration_minutes = run_data.get('total_distance', 0) * avg_pace
@@ -334,30 +377,48 @@ def get_run_analysis(run_id):
                         resting_hr = profile.get('resting_hr', 60) if profile else 60
                         max_hr = run_data.get('max_hr', 220 - profile.get('age', 30))
                         
-                        run_data['training_load'] = calculate_training_load(
+                        calculated_load = calculate_training_load(
                             duration_minutes=duration_minutes,
                             avg_hr=run_data.get('avg_hr_all', 0),
                             resting_hr=resting_hr,
                             max_hr=max_hr
                         )
-                        print(f"Added calculated training load: {run_data['training_load']}")
+                        # Set in both places
+                        run_data['training_load'] = calculated_load
+                        response_data['training_load'] = calculated_load
+                        print(f"Added calculated training load: {calculated_load}")
                 
-                if not run_data.get('recovery_time') and run_data.get('training_load'):
+                if not run_data.get('recovery_time') and (run_data.get('training_load') or response_data.get('training_load')):
                     # Estimate recovery time based on training load
-                    from app.running import calculate_recovery_time
-                    run_data['recovery_time'] = calculate_recovery_time(
-                        training_load=run_data.get('training_load', 0)
+                    training_load = run_data.get('training_load') or response_data.get('training_load')
+                    calculated_recovery = calculate_recovery_time(
+                        training_load=training_load
                     )
-                    print(f"Added calculated recovery time: {run_data['recovery_time']}")
+                    # Set in both places
+                    run_data['recovery_time'] = calculated_recovery
+                    response_data['recovery_time'] = calculated_recovery
+                    print(f"Added calculated recovery time: {calculated_recovery}")
             
+            # Double-check that the advanced metrics are included
+            if 'vo2max' not in response_data and 'vo2max' in run_data:
+                response_data['vo2max'] = run_data['vo2max']
+                print(f"Copied vo2max to top level: {response_data['vo2max']}")
+                
+            if 'training_load' not in response_data and 'training_load' in run_data:
+                response_data['training_load'] = run_data['training_load']
+                print(f"Copied training_load to top level: {response_data['training_load']}")
+                
+            if 'recovery_time' not in response_data and 'recovery_time' in run_data:
+                response_data['recovery_time'] = run_data['recovery_time']
+                print(f"Copied recovery_time to top level: {response_data['recovery_time']}")
+            
+            print(f"Final response includes advanced metrics:")
+            print(f"VO2 Max: {response_data.get('vo2max')}")
+            print(f"Training Load: {response_data.get('training_load')}")
+            print(f"Recovery Time: {response_data.get('recovery_time')}")
+                
             # Return the full analysis data with updates
-            return safe_json_dumps({
-                'message': 'Analysis data retrieved successfully',
-                'run_id': run['id'],
-                'date': run['date'],
-                'pace_limit': run['pace_limit'],
-                **run_data  # Unpack all the analysis data
-            }), 200
+            return safe_json_dumps(response_data), 200
             
         except json.JSONDecodeError:
             return jsonify({'error': 'Invalid run data format'}), 500

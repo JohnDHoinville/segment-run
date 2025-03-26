@@ -629,7 +629,7 @@ const comparisonChartOptions = {
           const label = context.dataset.label;
           // Check if this is pace or HR data
           if (value < 50) { // Assuming this is pace data
-            return `${label}: ${value.toFixed(1)} min/mi`;
+            return `${label}: ${formatPace(value)} min/mi`;
           } else {
             return `${label}: ${Math.round(value)} bpm`;
           }
@@ -1367,10 +1367,10 @@ function App() {
             ].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
             const segment = allSegments[context.dataIndex];
 
-            if (!segment) return `${label}: ${value.toFixed(1)}`;
+            if (!segment) return `${label}: ${formatPace(value)}`;
 
             return [
-              `${label}: ${value.toFixed(1)}`,
+              `${label}: ${formatPace(value)}`,
               `Distance: ${segment.distance.toFixed(2)} mi`,
               `Type: ${segment.type === 'fast' ? 'Fast' : 'Slow'} Segment`
             ];
@@ -1552,19 +1552,48 @@ function App() {
 
     const getPaceLimit = (run) => {
       // Check different possible locations for pace_limit
-      if (run.pace_limit !== undefined) {
+      // 1. Direct property on the run object
+      if (run.pace_limit !== undefined && run.pace_limit !== null) {
         return run.pace_limit;
-      } else if (run.data && run.data.pace_limit !== undefined) {
-        return run.data.pace_limit;
-      } else if (typeof run.data === 'string') {
-        try {
-          const parsedData = JSON.parse(run.data);
-          return parsedData.pace_limit;
-        } catch (e) {
-          return 0; // Default if parsing fails
+      } 
+      
+      // 2. Nested in the data object (most common pattern)
+      if (run.data) {
+        // 2a. If data is an object
+        if (typeof run.data === 'object' && run.data !== null) {
+          if (run.data.pace_limit !== undefined && run.data.pace_limit !== null) {
+            return run.data.pace_limit;
+          }
+        } 
+        // 2b. If data is a string, try to parse it
+        else if (typeof run.data === 'string') {
+          try {
+            const parsedData = JSON.parse(run.data);
+            if (parsedData && parsedData.pace_limit !== undefined && parsedData.pace_limit !== null) {
+              return parsedData.pace_limit;
+            }
+          } catch (e) {
+            console.error("Error parsing run data for pace limit:", e);
+          }
         }
       }
-      return 0; // Default return
+      
+      // 3. Finally, check if we have a fast_segments array with a target pace
+      try {
+        const data = typeof run.data === 'string' ? JSON.parse(run.data) : run.data;
+        if (data && data.fast_segments && data.fast_segments.length > 0) {
+          // The pace limit is usually the threshold between fast and slow segments
+          const fastSegment = data.fast_segments[0];
+          if (fastSegment.target_pace) {
+            return fastSegment.target_pace;
+          }
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+      
+      // Default to 0 if nothing found (will show as N/A)
+      return 0;
     };
 
     // Enhanced date formatting with better error handling and fallbacks
@@ -1722,6 +1751,31 @@ function App() {
         const analysisData = await response.json();
         console.log(`Successfully retrieved analysis data for run ${runId}`, analysisData);
         
+        // Ensure advanced metrics are copied to the top level from data if needed
+        if (analysisData.data) {
+          // Copy advanced metrics to top level if they exist in nested data
+          if (analysisData.data.vo2max !== undefined && (analysisData.vo2max === undefined || analysisData.vo2max === null)) {
+            console.log("Copying vo2max from nested data to top level");
+            analysisData.vo2max = analysisData.data.vo2max;
+          }
+          
+          if (analysisData.data.training_load !== undefined && (analysisData.training_load === undefined || analysisData.training_load === null)) {
+            console.log("Copying training_load from nested data to top level");
+            analysisData.training_load = analysisData.data.training_load;
+          }
+          
+          if (analysisData.data.recovery_time !== undefined && (analysisData.recovery_time === undefined || analysisData.recovery_time === null)) {
+            console.log("Copying recovery_time from nested data to top level");
+            analysisData.recovery_time = analysisData.data.recovery_time;
+          }
+        }
+
+        console.log("Final analysis data with metrics:", {
+          vo2max: analysisData.vo2max,
+          training_load: analysisData.training_load,
+          recovery_time: analysisData.recovery_time
+        });
+        
         // Update the results state in the parent component to display the analysis
         setResults(analysisData);
         
@@ -1788,11 +1842,42 @@ function App() {
                     <td>{safeNumber(getRunDistance(run))} mi</td>
                     <td>
                       {(() => {
-                        const paceLimit = getPaceLimit(run);
+                        console.log(`Run ${run.id} pace limit debug:`, {
+                          directPaceLimit: run.pace_limit,
+                          directPaceLimitType: typeof run.pace_limit,
+                          dataPaceLimit: run.data?.pace_limit,
+                          runKeys: Object.keys(run),
+                          hasDataField: run.data !== undefined,
+                          dataType: typeof run.data
+                        });
+                        
+                        // Try multiple possible locations for pace limit
+                        let paceLimit = run.pace_limit;
+                        
+                        // Check run.pace_limit directly first (priority)
+                        if (paceLimit === undefined || paceLimit === null || paceLimit === 0) {
+                          // Try data.pace_limit next
+                          if (run.data) {
+                            if (typeof run.data === 'object' && run.data !== null) {
+                              paceLimit = run.data.pace_limit; 
+                            } else if (typeof run.data === 'string') {
+                              try {
+                                const parsedData = JSON.parse(run.data);
+                                paceLimit = parsedData.pace_limit;
+                              } catch (e) {
+                                console.error("Error parsing run data for pace limit:", e);
+                              }
+                            }
+                          }
+                        }
+                        
+                        console.log(`Final pace limit for run ${run.id}:`, paceLimit);
+                        
                         // Return N/A for zero or invalid pace limits
-                        if (paceLimit === 0 || paceLimit === undefined) {
+                        if (paceLimit === undefined || paceLimit === null || paceLimit === 0) {
                           return 'N/A';
                         }
+                        
                         // Otherwise format the pace
                         return formatPace(paceLimit);
                       })()}
@@ -1801,27 +1886,66 @@ function App() {
                       <div className="fast-summary">
                         <span className="fast-distance">
                           {(() => {
-                            const fastDistance = safeNumber(run.data?.fast_distance || 
-                              (typeof run.data === 'string' ? JSON.parse(run.data)?.fast_distance : 0));
-                            return `${fastDistance} mi`;
+                            // Try multiple paths to get fast distance
+                            let fastDistance = 0;
+                            
+                            // Direct access
+                            if (run.fast_distance !== undefined) {
+                              fastDistance = run.fast_distance;
+                            } 
+                            // From data object 
+                            else if (run.data?.fast_distance !== undefined) {
+                              fastDistance = run.data.fast_distance;
+                            }
+                            // Parse JSON string if needed
+                            else if (typeof run.data === 'string') {
+                              try {
+                                const parsedData = JSON.parse(run.data);
+                                fastDistance = parsedData?.fast_distance || 0;
+                              } catch (e) {
+                                console.error("Error parsing run data for fast distance:", e);
+                              }
+                            }
+                            
+                            return `${safeNumber(fastDistance)} mi`;
                           })()}
                         </span>
                         <span className="fast-pace">
                           {(() => {
                             // Attempt to extract and format the pace
                             try {
+                              // Parse data if it's a string
                               const data = typeof run.data === 'string' ? JSON.parse(run.data) : run.data;
+                              
                               // Try different possible locations for the pace value
-                              const pace = data.avg_pace_fast || data.avg_hr_fast || 
-                                          data.fast_segments?.[0]?.pace || 0;
-                                
+                              let pace = 0;
+                              
+                              // Check multiple possible properties
+                              if (data?.avg_pace_fast) {
+                                pace = data.avg_pace_fast;
+                              } else if (data?.fast_segments && data.fast_segments.length > 0) {
+                                // Get average pace across all fast segments
+                                const validPaces = data.fast_segments
+                                  .filter(seg => seg.pace && seg.pace !== Infinity && !isNaN(seg.pace))
+                                  .map(seg => seg.pace);
+                                  
+                                if (validPaces.length > 0) {
+                                  pace = validPaces.reduce((sum, p) => sum + p, 0) / validPaces.length;
+                                }
+                              }
+                              
+                              // Fall back to individual segment if available
+                              if (!pace && data?.fast_segments?.[0]?.pace) {
+                                pace = data.fast_segments[0].pace;
+                              }
+                              
                               // Sanity check for unreasonably large values (over 30 min/mile is probably wrong)
-                              if (pace > 30) {
+                              if (!pace || pace > 30 || pace === Infinity || isNaN(pace)) {
                                 return '';
                               }
                               
                               // Format and return the pace
-                              return pace ? `${formatPace(pace)} min/mi` : '';
+                              return `${formatPace(pace)} min/mi`;
                             } catch (e) {
                               console.error("Error extracting pace:", e);
                               return '';
@@ -1979,7 +2103,7 @@ function App() {
               </div>
               <div className="stat-item">
                 <label>Average Pace:</label>
-                <span>{safeNumber(run1.avg_pace, 1)} min/mi</span>
+                <span>{formatPace(run1.avg_pace)} min/mi</span>
               </div>
               <div className="stat-item">
                 <label>Average HR:</label>
@@ -2011,7 +2135,7 @@ function App() {
               </div>
               <div className="stat-item">
                 <label>Average Pace:</label>
-                <span>{safeNumber(run2.avg_pace, 1)} min/mi</span>
+                <span>{formatPace(run2.avg_pace)} min/mi</span>
               </div>
               <div className="stat-item">
                 <label>Average HR:</label>
@@ -2425,13 +2549,99 @@ function App() {
                           trainingLoad: results.training_load,
                           trainingLoadType: results.training_load ? typeof results.training_load : 'undefined',
                           recoveryTime: results.recovery_time,
-                          recoveryTimeType: results.recovery_time ? typeof results.recovery_time : 'undefined'
+                          recoveryTimeType: results.recovery_time ? typeof results.recovery_time : 'undefined',
+                          dataStructure: results.data ? 'results contains data field' : 'no data field',
+                          hasNestedData: results.data && results.data.vo2max ? true : false
                         })}
-                        <AdvancedMetrics 
-                          vo2max={results.vo2max !== null ? Number(results.vo2max) : null}
-                          trainingLoad={results.training_load !== null ? Number(results.training_load) : null}
-                          recoveryTime={results.recovery_time !== null ? Number(results.recovery_time) : null}
-                        />
+                        
+                        {(() => {
+                          // Extract metrics with fallbacks to handle different data structures
+                          let vo2max = null;
+                          let trainingLoad = null;
+                          let recoveryTime = null;
+                          
+                          // Pretty print helper for debugging
+                          const getDataLocation = () => {
+                            // Figure out exactly where each piece of data is located
+                            const locations = {
+                              directVo2max: results?.vo2max !== undefined,
+                              directTrainingLoad: results?.training_load !== undefined,
+                              directRecoveryTime: results?.recovery_time !== undefined,
+                              
+                              nestedDataExists: results?.data !== undefined,
+                              nestedVo2max: results?.data?.vo2max !== undefined,
+                              nestedTrainingLoad: results?.data?.training_load !== undefined,
+                              nestedRecoveryTime: results?.data?.recovery_time !== undefined
+                            };
+                            return locations;
+                          };
+                          
+                          console.log('Advanced Metrics - Data Structure:', getDataLocation());
+                          
+                          // 1. Try direct access first (direct properties)
+                          if (results?.vo2max !== undefined && results.vo2max !== null) {
+                            vo2max = results.vo2max;
+                            console.log('Found vo2max as direct property:', vo2max);
+                          }
+                          
+                          if (results?.training_load !== undefined && results.training_load !== null) {
+                            trainingLoad = results.training_load;
+                            console.log('Found training_load as direct property:', trainingLoad);
+                          }
+                          
+                          if (results?.recovery_time !== undefined && results.recovery_time !== null) {
+                            recoveryTime = results.recovery_time;
+                            console.log('Found recovery_time as direct property:', recoveryTime);
+                          }
+                          
+                          // 2. Try data.* structure as fallback
+                          if ((!vo2max || vo2max === null) && results?.data?.vo2max !== undefined) {
+                            vo2max = results.data.vo2max;
+                            console.log('Found vo2max in nested data property:', vo2max);
+                          }
+                          
+                          if ((!trainingLoad || trainingLoad === null) && results?.data?.training_load !== undefined) {
+                            trainingLoad = results.data.training_load;
+                            console.log('Found training_load in nested data property:', trainingLoad);
+                          }
+                          
+                          if ((!recoveryTime || recoveryTime === null) && results?.data?.recovery_time !== undefined) {
+                            recoveryTime = results.data.recovery_time;
+                            console.log('Found recovery_time in nested data property:', recoveryTime);
+                          }
+                          
+                          // 3. Handle string values (parse if needed)
+                          if (typeof vo2max === 'string') {
+                            vo2max = parseFloat(vo2max);
+                            console.log('Converted vo2max from string to number:', vo2max);
+                          }
+                          
+                          if (typeof trainingLoad === 'string') {
+                            trainingLoad = parseFloat(trainingLoad);
+                            console.log('Converted training_load from string to number:', trainingLoad);
+                          }
+                          
+                          if (typeof recoveryTime === 'string') {
+                            recoveryTime = parseFloat(recoveryTime);
+                            console.log('Converted recovery_time from string to number:', recoveryTime);
+                          }
+                          
+                          // 4. Final result with all extracted metrics
+                          console.log('Final extracted metrics:', { 
+                            vo2max, 
+                            trainingLoad, 
+                            recoveryTime,
+                            allPresent: vo2max && trainingLoad && recoveryTime ? 'YES' : 'NO' 
+                          });
+                          
+                          return (
+                            <AdvancedMetrics 
+                              vo2max={vo2max}
+                              trainingLoad={trainingLoad}
+                              recoveryTime={recoveryTime}
+                            />
+                          );
+                        })()}
                       </div>
 
                       {/* Race predictions section */}

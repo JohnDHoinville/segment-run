@@ -395,6 +395,17 @@ class RunDatabase:
     def add_run(self, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit=None):
         """Add a new run to the database"""
         try:
+            # Debug what data is being passed to add_run
+            print("\n=== DATABASE: ADDING RUN ===")
+            try:
+                data_obj = json.loads(data) if isinstance(data, str) else data
+                print(f"Database receiving advanced metrics:")
+                print(f"VO2max: {data_obj.get('vo2max')}")
+                print(f"Training Load: {data_obj.get('training_load')}")
+                print(f"Recovery Time: {data_obj.get('recovery_time')}")
+            except Exception as e:
+                print(f"Error parsing data for debug: {str(e)}")
+            
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -402,9 +413,11 @@ class RunDatabase:
                     (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
                     VALUES 
                     (?, ?, ?, ?, ?, ?, ?)
-                    ''', (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit))
+                ''', (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit))
                 conn.commit()
-                return cursor.lastrowid
+                run_id = cursor.lastrowid
+                print(f"Database: Successfully saved run {run_id} with metrics")
+                return run_id
         except Exception as e:
             print(f"Error adding run: {e}")
             return None 
@@ -439,8 +452,15 @@ class RunDatabase:
                 if run_dict['data'] and isinstance(run_dict['data'], str):
                     try:
                         run_dict['data'] = json.loads(run_dict['data'])
+                        # Debug the retrieved data
+                        print("\n=== DATABASE: RETRIEVING RUN ===")
+                        print(f"Retrieved run {run_id} with advanced metrics:")
+                        print(f"VO2max: {run_dict['data'].get('vo2max')}")
+                        print(f"Training Load: {run_dict['data'].get('training_load')}")
+                        print(f"Recovery Time: {run_dict['data'].get('recovery_time')}")
                     except json.JSONDecodeError:
                         # Keep as string if can't be parsed
+                        print(f"Error: Could not parse JSON data for run {run_id}")
                         pass
                 
                 return run_dict
