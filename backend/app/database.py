@@ -346,10 +346,13 @@ class RunDatabase:
             cursor = conn.cursor()
             cursor.execute('SELECT age, resting_hr, weight, gender FROM profile WHERE user_id = ?', (user_id,))
             result = cursor.fetchone()
+            # Convert weight from kg back to lbs
+            weight_in_kg = result[2] if result else 70
+            weight_in_lbs = weight_in_kg * 2.20462
             profile = {
                 'age': result[0] if result else 0,
                 'resting_hr': result[1] if result else 0,
-                'weight': result[2] if result else 70,
+                'weight': round(weight_in_lbs, 1),  # Round to 1 decimal place
                 'gender': result[3] if result else 1
             }
             print("Retrieved profile:", profile)
