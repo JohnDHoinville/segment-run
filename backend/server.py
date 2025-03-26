@@ -12,9 +12,9 @@ from functools import wraps
 import secrets
 import traceback
 from json import JSONEncoder
-from routes.auth import auth_bp
-from routes.runs import runs_bp
-from routes.profile import profile_bp
+from app.routes.auth import auth_bp
+from app.routes.runs import runs_bp
+from app.routes.profile import profile_bp
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -48,10 +48,9 @@ app.secret_key = secrets.token_hex(32)
 CORS(app,
     origins=["http://localhost:3000"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "Cookie"],  # Add Cookie to allowed headers
-    supports_credentials=True,
-    expose_headers=["Content-Type", "Authorization", "Set-Cookie"],  # Add Set-Cookie
-    allow_credentials=True)
+    allow_headers=["Content-Type", "Authorization"],
+    supports_credentials=True
+)
 
 # Add debug logging for session
 @app.before_request
@@ -290,7 +289,7 @@ def save_profile():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# Register the separate route blueprints
+# Register blueprints
 app.register_blueprint(auth_bp)
 app.register_blueprint(runs_bp)
 app.register_blueprint(profile_bp)
