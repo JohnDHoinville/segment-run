@@ -100,11 +100,12 @@
 }
 
 .upload-section {
-  background-color: white;
+  position: relative;
+  background-color: transparent;
   border-radius: 10px;
-  padding: 2rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  margin-bottom: 2rem;
+  padding: 0;
+  box-shadow: none;
+  margin-bottom: 1rem;
 }
 
 .file-upload-box {
@@ -1682,4 +1683,201 @@ tr:hover {
 
 .dark .segment-description {
   color: var(--text-secondary);
+}
+
+/* Add run button styling */
+.add-run-button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  color: white;
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: absolute;
+  top: -20px;
+  left: -20px;
+  z-index: 10;
+}
+
+.add-run-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+
+.upload-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.close-upload-button {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 24px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.close-upload-button:hover {
+  background-color: var(--bg-secondary);
+}
+
+.dark .close-upload-button {
+  color: var(--text-primary);
+}
+
+.dark .close-upload-button:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* Update upload form styling for cleaner appearance */
+.upload-form {
+  background-color: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.dark .upload-form {
+  background-color: var(--bg-tertiary);
+}
+
+/* Update file input styling */
+
+/* Standalone upload section when no results are shown */
+.upload-section-standalone {
+  background-color: white;
+  border-radius: 10px;
+  padding: 2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.dark .upload-section-standalone {
+  background-color: var(--bg-secondary);
+}
+
+/* Button centered in standalone view */
+.add-run-button-centered {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  color: white;
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  margin: 1rem auto;
+  transition: all 0.2s ease;
+}
+
+.add-run-button-centered:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Button positioned over results */
+.add-run-button {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  color: white;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: absolute;
+  top: -22px;
+  left: -22px;
+  z-index: 10;
+}
+
+.add-run-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Add run button in header */
+.add-run-button-header {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  color: white;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  margin-right: 8px;
+  transition: all 0.2s ease;
+}
+
+.add-run-button-header:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+  background-color: var(--text-primary);
+}
+
+/* Upload form container */
+.upload-form-container {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 400px;
+  max-width: 90vw;
+  z-index: 1000;
+  animation: slideInForm 0.3s ease-out;
+}
+
+@keyframes slideInForm {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Update upload form styling */
+.upload-form {
+  background-color: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-color);
+}
+
+.dark .upload-form-container {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
