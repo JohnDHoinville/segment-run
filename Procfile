@@ -1,1 +1,1 @@
-web: cd backend && PYTHONPATH=$PYTHONPATH:. gunicorn server:app
+web: cd backend && PYTHONPATH=/app/backend gunicorn server:app
