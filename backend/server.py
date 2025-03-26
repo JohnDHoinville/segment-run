@@ -15,6 +15,7 @@ from json import JSONEncoder
 from app.routes.auth import auth_bp
 from app.routes.runs import runs_bp
 from app.routes.profile import profile_bp
+from app import app
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -26,7 +27,6 @@ class DateTimeEncoder(JSONEncoder):
 # Load environment variables
 load_dotenv('.flaskenv')
 
-app = Flask(__name__)
 print("Starting Flask server...")
 
 # Use the custom encoder for all JSON responses
