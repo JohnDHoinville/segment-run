@@ -5,6 +5,9 @@ import os
 from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
 from json import JSONEncoder
+import psycopg2
+from psycopg2.extras import DictCursor
+from urllib.parse import urlparse
 
 # Add a proper JSON encoder for Infinity values
 class SafeJSONEncoder(JSONEncoder):
@@ -18,457 +21,457 @@ class SafeJSONEncoder(JSONEncoder):
         def handle_special_values(item):
             if isinstance(item, float):
                 if item == float('inf') or item == float('Infinity'):
-                    return "Infinity"
-                if item == float('-inf') or item == float('-Infinity'):
-                    return "-Infinity"
-                if item != item:  # Check for NaN
-                    return "NaN"
-            elif isinstance(item, dict):
-                return {k: handle_special_values(v) for k, v in item.items()}
-            elif isinstance(item, list):
-                return [handle_special_values(i) for i in item]
+                    return 'Infinity'
+                elif item == float('-inf') or item == float('-Infinity'):
+                    return '-Infinity'
             return item
-            
-        # Process the entire object tree
-        processed_obj = handle_special_values(obj)
-        return super().encode(processed_obj)
 
-# Use this instead of the regular JSON encoder
+        if isinstance(obj, dict):
+            obj = {k: handle_special_values(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            obj = [handle_special_values(item) for item in obj]
+        return super().encode(obj)
+
 def safe_json_dumps(obj):
-    return json.dumps(obj, cls=SafeJSONEncoder)
+    return SafeJSONEncoder().encode(obj)
 
 class RunDatabase:
     def __init__(self, db_name='runs.db'):
         self.db_name = db_name
-        # Only create database if it doesn't exist
-        if not os.path.exists(self.db_name):
-            print(f"Creating new database: {self.db_name}")
-            self.init_db()
-        else:
-            print(f"Using existing database: {self.db_name}")
-            # Ensure all tables exist (in case of schema updates)
-            self.ensure_tables()
+        self.conn = None
+        self.cursor = None
+        self.connect()
+        self.init_db()
+
+    def connect(self):
+        try:
+            # Get database URL from environment variable
+            database_url = os.getenv('DATABASE_URL')
+            if database_url:
+                # Parse the URL and create connection string
+                url = urlparse(database_url)
+                self.conn = psycopg2.connect(
+                    dbname=url.path[1:],
+                    user=url.username,
+                    password=url.password,
+                    host=url.hostname,
+                    port=url.port
+                )
+                self.cursor = self.conn.cursor(cursor_factory=DictCursor)
+            else:
+                # Fallback to SQLite for local development
+                self.conn = sqlite3.connect(self.db_name)
+                self.conn.row_factory = sqlite3.Row
+                self.cursor = self.conn.cursor()
+        except Exception as e:
+            print(f"Error connecting to database: {e}")
+            raise
 
     def init_db(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            # Add users table
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            # Create profile table with user_id
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS profile (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    age INTEGER DEFAULT 0,
-                    resting_hr INTEGER DEFAULT 0,
-                    weight REAL DEFAULT 70,
-                    gender INTEGER DEFAULT 1,  /* 1 for male, 0 for female */
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            ''')
-            # Create runs table with all required columns
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    date TEXT NOT NULL,
-                    total_distance REAL,
-                    avg_pace REAL,
-                    avg_hr REAL,
-                    data TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            ''')
-            conn.commit()
-
-            # Create default admin user
-            cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',))
-            if not cursor.fetchone():
-                password_hash = generate_password_hash('admin123')
-                cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
-                             ('admin', password_hash))
-                user_id = cursor.lastrowid
-                cursor.execute('INSERT INTO profile (user_id, age, resting_hr) VALUES (?, 0, 0)',
-                             (user_id,))
-                conn.commit()
-                print("Created default admin user (username: admin, password: admin123)")
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL initialization
+                self.cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        username VARCHAR(255) UNIQUE NOT NULL,
+                        password_hash VARCHAR(255) NOT NULL
+                    )
+                """)
+                self.cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS runs (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER REFERENCES users(id),
+                        date DATE NOT NULL,
+                        data JSONB,
+                        total_distance FLOAT,
+                        avg_pace FLOAT,
+                        avg_hr FLOAT,
+                        pace_limit FLOAT
+                    )
+                """)
+                self.cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS profiles (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER REFERENCES users(id),
+                        age INTEGER,
+                        resting_hr INTEGER,
+                        weight FLOAT,
+                        gender INTEGER
+                    )
+                """)
+            else:
+                # SQLite initialization
+                self.cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT UNIQUE NOT NULL,
+                        password_hash TEXT NOT NULL
+                    )
+                """)
+                self.cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS runs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        date TEXT NOT NULL,
+                        data TEXT,
+                        total_distance REAL,
+                        avg_pace REAL,
+                        avg_hr REAL,
+                        pace_limit REAL,
+                        FOREIGN KEY (user_id) REFERENCES users (id)
+                    )
+                """)
+                self.cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS profiles (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        age INTEGER,
+                        resting_hr INTEGER,
+                        weight REAL,
+                        gender INTEGER,
+                        FOREIGN KEY (user_id) REFERENCES users (id)
+                    )
+                """)
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error initializing database: {e}")
+            self.conn.rollback()
+            raise
 
     def ensure_tables(self):
-        """Ensure all required tables exist without recreating the database"""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            
-            # Check if pace_limit column exists
-            try:
-                cursor.execute('SELECT pace_limit FROM runs LIMIT 1')
-            except sqlite3.OperationalError:
-                print("Adding pace_limit column to runs table")
-                cursor.execute('ALTER TABLE runs ADD COLUMN pace_limit REAL')
-                conn.commit()
-            
-            # First, check if we need to add new columns
-            try:
-                cursor.execute('SELECT weight, gender FROM profile LIMIT 1')
-            except sqlite3.OperationalError:
-                print("Adding weight and gender columns to profile table")
-                cursor.execute('ALTER TABLE profile ADD COLUMN weight REAL DEFAULT 70')
-                cursor.execute('ALTER TABLE profile ADD COLUMN gender INTEGER DEFAULT 1')
-                conn.commit()
-            
-            # Create tables if they don't exist
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS profile (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    age INTEGER DEFAULT 0,
-                    resting_hr INTEGER DEFAULT 0,
-                    weight REAL DEFAULT 70,
-                    gender INTEGER DEFAULT 1,  /* 1 for male, 0 for female */
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    date TEXT NOT NULL,
-                    total_distance REAL,
-                    avg_pace REAL,
-                    avg_hr REAL,
-                    data TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            ''')
-            conn.commit()
-
-            # Check for default admin user
-            cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',))
-            if not cursor.fetchone():
-                password_hash = generate_password_hash('admin123', method='sha256')
-                cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
-                             ('admin', password_hash))
-                user_id = cursor.lastrowid
-                cursor.execute('INSERT INTO profile (user_id, age, resting_hr) VALUES (?, 0, 0)',
-                             (user_id,))
-                conn.commit()
-                print("Created default admin user (username: admin, password: admin123)")
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL table check
+                self.cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'users'
+                    )
+                """)
+                if not self.cursor.fetchone()[0]:
+                    self.init_db()
+            else:
+                # SQLite table check
+                self.cursor.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name='users'
+                """)
+                if not self.cursor.fetchone():
+                    self.init_db()
+        except Exception as e:
+            print(f"Error ensuring tables: {e}")
+            self.conn.rollback()
+            raise
 
     def save_run(self, user_id, run_data):
         try:
-            print("Saving run data for user:", user_id)
-            print("Run data to save:", run_data)
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                
-                # Extract values from run_data
-                data_obj = run_data.get('data', {})
-                if isinstance(data_obj, str):
-                    data_obj = json.loads(data_obj)
-                
-                print("Parsed data object:", data_obj)
-                
-                # Calculate total time for average pace
-                total_time = 0
-                for segment in data_obj.get('fast_segments', []) + data_obj.get('slow_segments', []):
-                    if isinstance(segment, dict) and 'time_diff' in segment:
-                        total_time += segment['time_diff']
-                
-                # Calculate average pace
-                total_distance = data_obj.get('total_distance', 0)
-                avg_pace = total_time / total_distance if total_distance > 0 else 0
-                avg_hr = data_obj.get('avg_hr_all', 0)
-                
-                # Convert data to string if it's not already
-                data_str = json.dumps(data_obj, cls=SafeJSONEncoder) if isinstance(data_obj, dict) else data_obj
-                
-                print("Values to insert:", {
-                    'user_id': user_id,
-                    'date': run_data['date'],
-                    'total_distance': total_distance,
-                    'avg_pace': avg_pace,
-                    'avg_hr': avg_hr
-                })
-                
-                cursor.execute('''
-                    INSERT INTO runs (
-                        user_id, 
-                        date, 
-                        total_distance, 
-                        avg_pace, 
-                        avg_hr, 
-                        data
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL save
+                self.cursor.execute("""
+                    INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
                     user_id,
                     run_data['date'],
-                    total_distance,
-                    avg_pace,
-                    avg_hr,
-                    data_str
+                    json.dumps(run_data['data']),
+                    run_data['total_distance'],
+                    run_data['avg_pace'],
+                    run_data.get('avg_hr'),
+                    run_data.get('pace_limit')
                 ))
-                conn.commit()
-                run_id = cursor.lastrowid
-                print(f"Successfully saved run {run_id} for user {user_id}")
-                return run_id
+            else:
+                # SQLite save
+                self.cursor.execute("""
+                    INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    user_id,
+                    run_data['date'],
+                    json.dumps(run_data['data']),
+                    run_data['total_distance'],
+                    run_data['avg_pace'],
+                    run_data.get('avg_hr'),
+                    run_data.get('pace_limit')
+                ))
+            self.conn.commit()
+            return self.cursor.lastrowid
         except Exception as e:
-            print(f"Error saving run: {str(e)}")
-            print(f"Run data: {run_data}")
-            traceback.print_exc()
-            raise e
+            print(f"Error saving run: {e}")
+            self.conn.rollback()
+            raise
 
     def get_all_runs(self, user_id):
-        print(f"Getting runs for user {user_id} from database")
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT * FROM runs 
-                WHERE user_id = ? 
-                ORDER BY date DESC, created_at DESC
-            ''', (user_id,))
-            
-            # Get column names
-            columns = [description[0] for description in cursor.description]
-            runs = cursor.fetchall()
-            
-            # Map results to dictionary using column names
-            formatted_runs = []
-            for run in runs:
-                run_dict = {}
-                for i, column in enumerate(columns):
-                    value = run[i]
-                    # Handle JSON data field
-                    if column == 'data' and value:
-                        try:
-                            if isinstance(value, str):
-                                value = json.loads(value)
-                        except json.JSONDecodeError:
-                            print(f"Error decoding JSON for run {run[0]}")
-                            value = {}
-                    # Ensure numeric fields have default values
-                    elif column in ['total_distance', 'avg_pace', 'avg_hr', 'pace_limit']:
-                        value = float(value) if value is not None else 0.0
-                    run_dict[column] = value
-                formatted_runs.append(run_dict)
-            
-            return formatted_runs
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT * FROM runs 
+                    WHERE user_id = %s 
+                    ORDER BY date DESC
+                """, (user_id,))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT * FROM runs 
+                    WHERE user_id = ? 
+                    ORDER BY date DESC
+                """, (user_id,))
+            runs = self.cursor.fetchall()
+            return [dict(run) for run in runs]
+        except Exception as e:
+            print(f"Error getting all runs: {e}")
+            self.conn.rollback()
+            raise
 
     def get_run_by_id(self, run_id, user_id=None):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            if user_id:
-                cursor.execute('SELECT * FROM runs WHERE id = ? AND user_id = ?', (run_id, user_id))
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                if user_id:
+                    self.cursor.execute("""
+                        SELECT * FROM runs 
+                        WHERE id = %s AND user_id = %s
+                    """, (run_id, user_id))
+                else:
+                    self.cursor.execute("""
+                        SELECT * FROM runs 
+                        WHERE id = %s
+                    """, (run_id,))
             else:
-                cursor.execute('SELECT * FROM runs WHERE id = ?', (run_id,))
-            # Get column names
-            columns = [description[0] for description in cursor.description]
-            run = cursor.fetchone()
-            
-            if run:
-                # Map result to dictionary using column names
-                run_dict = {}
-                for i, column in enumerate(columns):
-                    run_dict[column] = run[i]
-                return run_dict
-            return None
+                # SQLite query
+                if user_id:
+                    self.cursor.execute("""
+                        SELECT * FROM runs 
+                        WHERE id = ? AND user_id = ?
+                    """, (run_id, user_id))
+                else:
+                    self.cursor.execute("""
+                        SELECT * FROM runs 
+                        WHERE id = ?
+                    """, (run_id,))
+            run = self.cursor.fetchone()
+            return dict(run) if run else None
+        except Exception as e:
+            print(f"Error getting run by id: {e}")
+            self.conn.rollback()
+            raise
 
     def get_recent_runs(self, user_id, limit=5):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM runs WHERE user_id = ? ORDER BY date DESC LIMIT ?', 
-                          (user_id, limit))
-            # Get column names
-            columns = [description[0] for description in cursor.description]
-            runs = cursor.fetchall()
-            
-            # Map results to dictionary using column names
-            formatted_runs = []
-            for run in runs:
-                run_dict = {}
-                for i, column in enumerate(columns):
-                    run_dict[column] = run[i]
-                formatted_runs.append(run_dict)
-            
-            return formatted_runs
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT * FROM runs 
+                    WHERE user_id = %s 
+                    ORDER BY date DESC 
+                    LIMIT %s
+                """, (user_id, limit))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT * FROM runs 
+                    WHERE user_id = ? 
+                    ORDER BY date DESC 
+                    LIMIT ?
+                """, (user_id, limit))
+            runs = self.cursor.fetchall()
+            return [dict(run) for run in runs]
+        except Exception as e:
+            print(f"Error getting recent runs: {e}")
+            self.conn.rollback()
+            raise
 
     def delete_run(self, run_id):
         try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute('DELETE FROM runs WHERE id = ?', (run_id,))
-                if cursor.rowcount == 0:
-                    raise Exception(f"No run found with ID {run_id}")
-                conn.commit()
-                print(f"Deleted run {run_id} from database")
-                return True
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL delete
+                self.cursor.execute("""
+                    DELETE FROM runs 
+                    WHERE id = %s
+                """, (run_id,))
+            else:
+                # SQLite delete
+                self.cursor.execute("""
+                    DELETE FROM runs 
+                    WHERE id = ?
+                """, (run_id,))
+            self.conn.commit()
         except Exception as e:
-            print(f"Database error deleting run {run_id}: {str(e)}")
-            raise e
+            print(f"Error deleting run: {e}")
+            self.conn.rollback()
+            raise
 
     def save_profile(self, user_id, age, resting_hr, weight=70, gender=1):
-        print(f"\nSaving profile for user {user_id}:")
-        # Convert from lbs to kg before storing (if desired):
-        weight_in_kg = weight * 0.453592
-
-        print(f"Age: {age}, Resting HR: {resting_hr}, Weight: {weight} lbs => {weight_in_kg:.1f} kg, Gender: {gender}")
-
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE profile 
-                SET age = ?, resting_hr = ?, weight = ?, gender = ?, updated_at = CURRENT_TIMESTAMP 
-                WHERE user_id = ?
-            ''', (age, resting_hr, weight_in_kg, gender, user_id))
-            conn.commit()
-            print("Profile saved successfully")
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL save/update
+                self.cursor.execute("""
+                    INSERT INTO profiles (user_id, age, resting_hr, weight, gender)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET age = %s, resting_hr = %s, weight = %s, gender = %s
+                """, (user_id, age, resting_hr, weight, gender,
+                      age, resting_hr, weight, gender))
+            else:
+                # SQLite save/update
+                self.cursor.execute("""
+                    INSERT OR REPLACE INTO profiles (user_id, age, resting_hr, weight, gender)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (user_id, age, resting_hr, weight, gender))
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error saving profile: {e}")
+            self.conn.rollback()
+            raise
 
     def get_profile(self, user_id):
-        print(f"\nGetting profile for user {user_id}")
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT age, resting_hr, weight, gender FROM profile WHERE user_id = ?', (user_id,))
-            result = cursor.fetchone()
-            # Convert weight from kg back to lbs
-            weight_in_kg = result[2] if result else 70
-            weight_in_lbs = weight_in_kg * 2.20462
-            profile = {
-                'age': result[0] if result else 0,
-                'resting_hr': result[1] if result else 0,
-                'weight': round(weight_in_lbs, 1),  # Round to 1 decimal place
-                'gender': result[3] if result else 1
-            }
-            print("Retrieved profile:", profile)
-            return profile
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT * FROM profiles 
+                    WHERE user_id = %s
+                """, (user_id,))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT * FROM profiles 
+                    WHERE user_id = ?
+                """, (user_id,))
+            profile = self.cursor.fetchone()
+            return dict(profile) if profile else None
+        except Exception as e:
+            print(f"Error getting profile: {e}")
+            self.conn.rollback()
+            raise
 
     def create_user(self, username, password):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            password_hash = generate_password_hash(password, method='sha256')
-            cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
-                          (username, password_hash))
-            user_id = cursor.lastrowid
-            cursor.execute('INSERT INTO profile (user_id, age, resting_hr) VALUES (?, 0, 0)',
-                          (user_id,))
-            conn.commit()
-            return user_id
+        try:
+            password_hash = generate_password_hash(password)
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL insert
+                self.cursor.execute("""
+                    INSERT INTO users (username, password_hash)
+                    VALUES (%s, %s)
+                    RETURNING id
+                """, (username, password_hash))
+            else:
+                # SQLite insert
+                self.cursor.execute("""
+                    INSERT INTO users (username, password_hash)
+                    VALUES (?, ?)
+                """, (username, password_hash))
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            print(f"Error creating user: {e}")
+            self.conn.rollback()
+            raise
 
     def verify_user(self, username, password):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,))
-            result = cursor.fetchone()
-            if result and check_password_hash(result[1], password):
-                return result[0]  # Return user_id
-            return None 
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT * FROM users 
+                    WHERE username = %s
+                """, (username,))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT * FROM users 
+                    WHERE username = ?
+                """, (username,))
+            user = self.cursor.fetchone()
+            if user and check_password_hash(user['password_hash'], password):
+                return dict(user)
+            return None
+        except Exception as e:
+            print(f"Error verifying user: {e}")
+            self.conn.rollback()
+            raise
 
     def update_password(self, user_id, current_password, new_password):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            # Verify current password
-            cursor.execute('SELECT password_hash FROM users WHERE id = ?', (user_id,))
-            result = cursor.fetchone()
-            if not result or not check_password_hash(result[0], current_password):
-                return False
-            
-            # Update to new password
-            new_password_hash = generate_password_hash(new_password)
-            cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?',
-                          (new_password_hash, user_id))
-            conn.commit()
-            return True 
+        try:
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT password_hash FROM users 
+                    WHERE id = %s
+                """, (user_id,))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT password_hash FROM users 
+                    WHERE id = ?
+                """, (user_id,))
+            user = self.cursor.fetchone()
+            if user and check_password_hash(user['password_hash'], current_password):
+                new_hash = generate_password_hash(new_password)
+                if isinstance(self.conn, psycopg2.extensions.connection):
+                    # PostgreSQL update
+                    self.cursor.execute("""
+                        UPDATE users 
+                        SET password_hash = %s 
+                        WHERE id = %s
+                    """, (new_hash, user_id))
+                else:
+                    # SQLite update
+                    self.cursor.execute("""
+                        UPDATE users 
+                        SET password_hash = ? 
+                        WHERE id = ?
+                    """, (new_hash, user_id))
+                self.conn.commit()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error updating password: {e}")
+            self.conn.rollback()
+            raise
 
     def add_run(self, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit=None):
-        """Add a new run to the database"""
         try:
-            # Debug what data is being passed to add_run
-            print("\n=== DATABASE: ADDING RUN ===")
-            try:
-                data_obj = json.loads(data) if isinstance(data, str) else data
-                print(f"Database receiving advanced metrics:")
-                print(f"VO2max: {data_obj.get('vo2max')}")
-                print(f"Training Load: {data_obj.get('training_load')}")
-                print(f"Recovery Time: {data_obj.get('recovery_time')}")
-            except Exception as e:
-                print(f"Error parsing data for debug: {str(e)}")
-            
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO runs 
-                    (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
-                    VALUES 
-                    (?, ?, ?, ?, ?, ?, ?)
-                ''', (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit))
-                conn.commit()
-                run_id = cursor.lastrowid
-                print(f"Database: Successfully saved run {run_id} with metrics")
-                return run_id
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL insert
+                self.cursor.execute("""
+                    INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (user_id, date, json.dumps(data), total_distance, avg_pace, avg_hr, pace_limit))
+            else:
+                # SQLite insert
+                self.cursor.execute("""
+                    INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (user_id, date, json.dumps(data), total_distance, avg_pace, avg_hr, pace_limit))
+            self.conn.commit()
+            return self.cursor.lastrowid
         except Exception as e:
             print(f"Error adding run: {e}")
-            return None 
+            self.conn.rollback()
+            raise
 
     def get_run(self, run_id, user_id):
-        """Get a specific run by ID and verify it belongs to the user"""
         try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT id, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit FROM runs WHERE id = ? AND user_id = ?",
-                    (run_id, user_id)
-                )
-                run = cursor.fetchone()
-                
-                if not run:
-                    return None
-                
-                # Convert to dictionary with column names
-                run_dict = {
-                    'id': run[0],
-                    'user_id': run[1],
-                    'date': run[2],
-                    'data': run[3],
-                    'total_distance': run[4],
-                    'avg_pace': run[5],
-                    'avg_hr': run[6],
-                    'pace_limit': run[7]
-                }
-                
-                # Try to parse the JSON data
-                if run_dict['data'] and isinstance(run_dict['data'], str):
-                    try:
-                        run_dict['data'] = json.loads(run_dict['data'])
-                        # Debug the retrieved data
-                        print("\n=== DATABASE: RETRIEVING RUN ===")
-                        print(f"Retrieved run {run_id} with advanced metrics:")
-                        print(f"VO2max: {run_dict['data'].get('vo2max')}")
-                        print(f"Training Load: {run_dict['data'].get('training_load')}")
-                        print(f"Recovery Time: {run_dict['data'].get('recovery_time')}")
-                    except json.JSONDecodeError:
-                        # Keep as string if can't be parsed
-                        print(f"Error: Could not parse JSON data for run {run_id}")
-                        pass
-                
-                return run_dict
-            
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT * FROM runs 
+                    WHERE id = %s AND user_id = %s
+                """, (run_id, user_id))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT * FROM runs 
+                    WHERE id = ? AND user_id = ?
+                """, (run_id, user_id))
+            run = self.cursor.fetchone()
+            return dict(run) if run else None
         except Exception as e:
             print(f"Error getting run: {e}")
-            traceback.print_exc()
-            return None 
+            self.conn.rollback()
+            raise 
