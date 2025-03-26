@@ -2408,7 +2408,11 @@ function App() {
                 
                 {results && analysisVisible && (
                   <div className="results">
-                    <h2>Analysis Results</h2>
+                    <h2>Analysis Results for {(results.run_date || results.date) ? new Date(results.run_date || results.date).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric'
+                    }) : 'Current Run'}</h2>
                     
                     {/* Summary metrics section with cleaner grid layout */}
                     <div className="results-summary">

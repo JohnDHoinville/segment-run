@@ -248,10 +248,11 @@ def analyze():
             print("\n=== SAVING RUN DATA ===")
             print(f"Advanced metrics being saved:")
             print(f"VO2 Max: {analysis_result.get('vo2max')}")
-            print(f"Training Load: {analysis_result.get('training_load')}")
-            print(f"Recovery Time: {analysis_result.get('recovery_time')}")
             
-            # Ensure analysis_result is encoded properly to preserve all metrics
+            # Add run date to analysis results
+            analysis_result['run_date'] = run_date
+            
+            # Save the run to database
             encoded_data = json.dumps(analysis_result, cls=CustomJSONEncoder)
             
             # Debug log the full encoded data (truncated for readability)
@@ -334,6 +335,7 @@ def get_run_analysis(run_id):
                 'message': 'Analysis data retrieved successfully',
                 'run_id': run['id'],
                 'date': run['date'],
+                'run_date': run['date'],
                 'pace_limit': run['pace_limit'],
             }
 
