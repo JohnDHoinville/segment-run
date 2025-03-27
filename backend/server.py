@@ -49,6 +49,7 @@ CORS(app,
     allow_headers=["Content-Type", "Authorization", "Cache-Control"],
     supports_credentials=True,
     expose_headers=["Content-Type", "Authorization", "Cache-Control"],
+    max_age=3600,
     resources={
         r"/*": {
             "origins": ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"],
@@ -71,6 +72,23 @@ def log_request_info():
     print(f'Session: {dict(session)}')
     print(f'Cookies: {dict(request.cookies)}')
     print('=====================\n')
+
+@app.before_request
+def handle_preflight():
+    # Handle OPTIONS requests for CORS preflight
+    if request.method == "OPTIONS":
+        print(f"Handling OPTIONS preflight request for: {request.path}")
+        origin = request.headers.get("Origin", "*")
+        
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", origin)
+        response.headers.add("Access-Control-Allow-Headers", 
+                           "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control")
+        response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+        response.headers.add("Access-Control-Allow-Credentials", "true")
+        response.headers.add("Access-Control-Max-Age", "3600")
+        print(f"OPTIONS response headers: {dict(response.headers)}")
+        return response
 
 db = RunDatabase()
 
@@ -860,7 +878,7 @@ def serve_chunk_js():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route('/auth/check', methods=['GET'])
+@app.route('/auth/check', methods=['GET', 'OPTIONS'])
 def check_auth():
     print("\n=== Auth Check ===")
     print(f"Session: {dict(session)}")
@@ -871,7 +889,7 @@ def check_auth():
             # Get user info to return
             user = db.get_user_by_id(user_id)
             if user:
-                return jsonify({
+                response = jsonify({
                     'authenticated': True,
                     'user': {
                         'id': user['id'],
@@ -882,20 +900,46 @@ def check_auth():
             else:
                 # Session exists but user not found - clear session
                 session.clear()
-                
-        # If we get here, user is not authenticated
-        return jsonify({
-            'authenticated': False
-        })
+                response = jsonify({
+                    'authenticated': False
+                })
+        else:
+            # If we get here, user is not authenticated
+            response = jsonify({
+                'authenticated': False
+            })
+            
+        # Set explicit CORS headers
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
+        
+        if origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+        
     except Exception as e:
         print(f"Auth check error: {str(e)}")
         traceback.print_exc()
-        return jsonify({
+        error_response = jsonify({
             'authenticated': False,
             'error': str(e)
-        }), 500
+        })
+        
+        # Set CORS headers even on error
+        origin = request.headers.get('Origin', '')
+        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return error_response, 500
 
-@app.route('/auth/login', methods=['POST'])
+@app.route('/auth/login', methods=['POST', 'OPTIONS'])
 def login():
     print("\n=== Login Attempt ===")
     try:
@@ -907,7 +951,16 @@ def login():
         
         if not username or not password:
             print("Missing username or password")
-            return jsonify({'error': 'Missing username or password'}), 400
+            error_response = jsonify({'error': 'Missing username or password'})
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+                error_response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return error_response, 400
             
         # Check credentials
         user = db.validate_login(username, password)
@@ -916,7 +969,7 @@ def login():
             session['user_id'] = user['id']
             session.permanent = True
             
-            return jsonify({
+            success_response = jsonify({
                 'success': True,
                 'user': {
                     'id': user['id'],
@@ -924,33 +977,81 @@ def login():
                     'email': user['email']
                 }
             })
+            
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+                success_response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            success_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return success_response
         else:
             print(f"Invalid login credentials for: {username}")
-            return jsonify({'error': 'Invalid credentials'}), 401
+            error_response = jsonify({'error': 'Invalid credentials'})
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+                error_response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return error_response, 401
             
     except Exception as e:
         print(f"Login error: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        error_response = jsonify({'error': str(e)})
+        # Set CORS headers even on error
+        origin = request.headers.get('Origin', '')
+        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return error_response, 500
 
-@app.route('/auth/logout', methods=['POST'])
+@app.route('/auth/logout', methods=['POST', 'OPTIONS'])
 def logout():
     print("\n=== Logout ===")
     try:
         session.clear()
-        return jsonify({
+        response = jsonify({
             'success': True,
             'message': 'Logged out successfully'
         })
+        
+        # Set CORS headers 
+        origin = request.headers.get('Origin', '')
+        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
     except Exception as e:
         print(f"Logout error: {str(e)}")
         traceback.print_exc()
-        return jsonify({
+        error_response = jsonify({
             'success': False,
             'error': str(e)
-        }), 500
+        })
+        
+        # Set CORS headers even on error
+        origin = request.headers.get('Origin', '')
+        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return error_response, 500
 
-@app.route('/auth/register', methods=['POST'])
+@app.route('/auth/register', methods=['POST', 'OPTIONS'])
 def register():
     print("\n=== Register User ===")
     try:
@@ -963,13 +1064,33 @@ def register():
         
         if not username or not password or not email:
             print("Missing required registration fields")
-            return jsonify({'error': 'Missing required fields'}), 400
+            error_response = jsonify({'error': 'Missing required fields'})
+            
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+                error_response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return error_response, 400
             
         # Check if user already exists
         existing_user = db.get_user_by_username(username)
         if existing_user:
             print(f"Username already exists: {username}")
-            return jsonify({'error': 'Username already exists'}), 409
+            error_response = jsonify({'error': 'Username already exists'})
+            
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+                error_response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return error_response, 409
             
         # Register the new user
         user_id = db.register_user(username, password, email)
@@ -987,7 +1108,7 @@ def register():
                 gender=0
             )
             
-            return jsonify({
+            success_response = jsonify({
                 'success': True,
                 'user': {
                     'id': user_id,
@@ -995,14 +1116,44 @@ def register():
                     'email': email
                 }
             })
+            
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+                success_response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            success_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return success_response
         else:
             print(f"Failed to register user: {username}")
-            return jsonify({'error': 'Registration failed'}), 500
+            error_response = jsonify({'error': 'Registration failed'})
+            
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+                error_response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return error_response, 500
             
     except Exception as e:
         print(f"Registration error: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        error_response = jsonify({'error': str(e)})
+        
+        # Set CORS headers even on error
+        origin = request.headers.get('Origin', '')
+        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return error_response, 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
