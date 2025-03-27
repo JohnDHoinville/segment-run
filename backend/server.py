@@ -32,33 +32,26 @@ app.json_encoder = DateTimeEncoder
 
 # Configure session
 app.config.update(
-    SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
+    SESSION_COOKIE_SECURE=True,  # For HTTPS connections
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=3600,  # 1 hour
-    SESSION_COOKIE_NAME='running_session'  # Custom session cookie name
+    SESSION_COOKIE_SAMESITE='None',  # Allow cross-site cookies
+    PERMANENT_SESSION_LIFETIME=86400,  # 24 hours
+    SESSION_COOKIE_NAME='gpx4u_session',
+    SESSION_COOKIE_DOMAIN=None,  # Allow cookies to be set across domains
+    SESSION_TYPE='filesystem'
 )
 
 # Generate a secure random key
 app.secret_key = secrets.token_hex(32)
 
-# Configure CORS
+# Configure CORS 
 CORS(app,
-    origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"],
-    methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Cache-Control"],
+    origins=["*"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Cache-Control", "Accept", "X-Requested-With", "Origin"],
     supports_credentials=True,
-    expose_headers=["Content-Type", "Authorization", "Cache-Control"],
-    max_age=3600,
-    resources={
-        r"/*": {
-            "origins": ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"],
-            "methods": ["GET", "POST", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
-            "supports_credentials": True,
-            "expose_headers": ["Content-Type", "Authorization", "Cache-Control"]
-        }
-    }
+    expose_headers=["Content-Type", "Authorization", "Cache-Control", "Set-Cookie"],
+    max_age=3600
 )
 
 # Add debug logging for session
@@ -942,10 +935,14 @@ def check_auth():
 @app.route('/auth/login', methods=['POST', 'OPTIONS'])
 def login():
     print("\n=== Login Attempt ===")
+    print(f"Request method: {request.method}")
+    print(f"Request headers: {dict(request.headers)}")
+    print(f"Request cookies: {dict(request.cookies)}")
+    print(f"Request data: {request.get_data(as_text=True)}")
+    
     try:
         data = request.json
-        print(f"Login attempt for: {data.get('username', 'unknown')}")
-        
+        print(f"JSON data parsed: {data}")
         username = data.get('username')
         password = data.get('password')
         
@@ -960,6 +957,7 @@ def login():
                 error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            print(f"Error response headers: {dict(error_response.headers)}")
             return error_response, 400
             
         # Check credentials
@@ -968,6 +966,7 @@ def login():
             print(f"Login successful for user: {username}")
             session['user_id'] = user['id']
             session.permanent = True
+            print(f"Session after login: {dict(session)}")
             
             success_response = jsonify({
                 'success': True,
@@ -986,6 +985,8 @@ def login():
                 success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             success_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            print(f"Success response headers: {dict(success_response.headers)}")
+            print(f"Success response cookies: {[c for c in success_response.headers.getlist('Set-Cookie')]}")
             return success_response
         else:
             print(f"Invalid login credentials for: {username}")
@@ -998,6 +999,7 @@ def login():
                 error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            print(f"Invalid credentials response headers: {dict(error_response.headers)}")
             return error_response, 401
             
     except Exception as e:
@@ -1012,6 +1014,7 @@ def login():
             error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        print(f"Exception response headers: {dict(error_response.headers)}")
         return error_response, 500
 
 @app.route('/auth/logout', methods=['POST', 'OPTIONS'])
@@ -1154,6 +1157,23 @@ def register():
             
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
         return error_response, 500
+
+@app.route('/api/config', methods=['GET'])
+def get_api_config():
+    """Provide config info to the frontend"""
+    response = jsonify({
+        'apiBaseUrl': 'https://gpx4u-0460cd678569.herokuapp.com',
+        'version': '1.0.0'
+    })
+    
+    # Set CORS headers
+    origin = request.headers.get('Origin', '')
+    if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    else:
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        
+    return response
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
