@@ -1,39 +1,24 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, createContext, useContext, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useContext, createContext } from 'react';
+import { MapContainer, TileLayer, Polyline, useMap, Marker, Popup, Tooltip as MapTooltip } from 'react-leaflet';
+import { Chart as ChartJS, LineElement, PointElement, CategoryScale, LinearScale, TimeScale, BarElement, Tooltip as ChartTooltip, Legend, Title, TimeSeriesScale, Filler } from 'chart.js';
+import { Line, Bar, Scatter } from 'react-chartjs-2';
+import 'chart.js/auto';
 import './App.css';
+import 'leaflet/dist/leaflet.css';
+import { FaBars, FaTimes, FaUser, FaSun, FaMoon, FaMapMarkerAlt, FaFilter, FaRunning, FaHome, FaEye, FaTrash, FaPlus, FaCheck, FaTimes as FaTimesCircle } from 'react-icons/fa';
+import CustomSegments from './components/CustomSegments';
+import PaceProgressChart from './components/PaceProgressChart';
+import HeartRatePaceCorrelation from './components/HeartRatePaceCorrelation';
+import FatigueAnalysis from './components/FatigueAnalysis';
+import PaceConsistency from './components/PaceConsistency';
 import LoadingSpinner from './components/LoadingSpinner';
 import LoginForm from './components/LoginForm';
 import TrainingZones from './components/TrainingZones';
 import AdvancedMetrics from './components/AdvancedMetrics';
 import RacePredictions from './components/RacePredictions';
+import L from 'leaflet';
 import { API_URL } from './config';
-import { Bar, Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip as ChartTooltip,
-  Legend,
-  Filler
-} from 'chart.js';
-import { 
-  MapContainer, 
-  TileLayer, 
-  Polyline,
-  Tooltip as MapTooltip,
-  Circle,
-  CircleMarker
-} from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import PaceProgressChart from './components/PaceProgressChart';
-import HeartRatePaceCorrelation from './components/HeartRatePaceCorrelation';
-import FatigueAnalysis from './components/FatigueAnalysis';
-import PaceConsistency from './components/PaceConsistency';
-import CustomSegments from './components/CustomSegments';
 
 // Register ChartJS components
 ChartJS.register(
@@ -42,6 +27,8 @@ ChartJS.register(
   BarElement,
   LineElement,
   PointElement,
+  TimeScale,
+  TimeSeriesScale,
   Title,
   ChartTooltip,
   Legend,
@@ -1013,8 +1000,6 @@ const findMileSplits = (results) => {
 };
 
 function App() {
-  const API_URL = 'http://localhost:5001';
-
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);

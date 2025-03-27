@@ -723,7 +723,7 @@ def handle_react_static_files():
         )
 
 # Explicit routes for the specific static files
-@app.route('/static/js/main.b0c022b1.js')
+@app.route('/static/js/main.ed081796.js')
 def serve_main_js():
     try:
         print("\n=== Serving Main JS ===")
@@ -754,7 +754,7 @@ def serve_main_js():
         print(f"Final headers: {headers}")
         
         # Use the correct Heroku path
-        file_path = '/app/backend/static/js/main.b0c022b1.js'
+        file_path = '/app/backend/static/js/main.ed081796.js'
         print(f"Checking file path: {file_path}")
         print(f"File exists: {os.path.exists(file_path)}")
         
@@ -784,13 +784,13 @@ def serve_main_js():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route('/static/css/main.42f26821.css')
+@app.route('/static/css/main.454d5194.css')
 def serve_main_css():
     try:
         print("\n=== Serving Main CSS ===")
         app_root = os.path.dirname(os.path.abspath(__file__))
         css_dir = os.path.join(app_root, 'static', 'css')
-        filename = 'main.42f26821.css'
+        filename = 'main.454d5194.css'
         
         print(f"App root: {app_root}")
         print(f"CSS directory: {css_dir}")
@@ -1179,7 +1179,7 @@ def register():
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
         return error_response, 500
 
-@app.route('/static/js/main.b0c022b1.js.map')
+@app.route('/static/js/main.ed081796.js.map')
 def serve_main_js_map():
     try:
         print("\n=== Serving Main JS Map ===")
@@ -1204,7 +1204,7 @@ def serve_main_js_map():
         headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Use the correct Heroku path
-        file_path = '/app/backend/static/js/main.b0c022b1.js.map'
+        file_path = '/app/backend/static/js/main.ed081796.js.map'
         
         if os.path.exists(file_path):
             print(f"Found file at: {file_path}")
@@ -1231,7 +1231,7 @@ def serve_main_js_map():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route('/static/css/main.42f26821.css.map')
+@app.route('/static/css/main.454d5194.css.map')
 def serve_main_css_map():
     try:
         print("\n=== Serving Main CSS Map ===")
@@ -1256,7 +1256,7 @@ def serve_main_css_map():
         headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Use the correct Heroku path
-        file_path = '/app/backend/static/css/main.42f26821.css.map'
+        file_path = '/app/backend/static/css/main.454d5194.css.map'
         
         if os.path.exists(file_path):
             print(f"Found file at: {file_path}")
