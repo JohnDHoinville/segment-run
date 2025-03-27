@@ -84,56 +84,54 @@ def serve_static(path):
     print(f"Current working directory: {os.getcwd()}")
     
     try:
+        # Split the path into components
+        path_parts = path.split('/')
+        if len(path_parts) < 2:
+            print(f"Invalid path format: {path}")
+            return f"Invalid path format: {path}", 404
+            
+        # The first part should be 'js' or 'css'
+        static_type = path_parts[0]
+        if static_type not in ['js', 'css']:
+            print(f"Invalid static type: {static_type}")
+            return f"Invalid static type: {static_type}", 404
+            
+        # The rest is the file path
+        file_path = '/'.join(path_parts[1:])
+        
         # Determine the correct MIME type based on file extension
         mime_type = None
         if path.endswith('.css'):
             mime_type = 'text/css'
         elif path.endswith('.js'):
             mime_type = 'application/javascript'
-        elif path.endswith('.png'):
-            mime_type = 'image/png'
-        elif path.endswith('.jpg') or path.endswith('.jpeg'):
-            mime_type = 'image/jpeg'
-        elif path.endswith('.svg'):
-            mime_type = 'image/svg+xml'
-        elif path.endswith('.ico'):
-            mime_type = 'image/x-icon'
-        elif path.endswith('.json'):
-            mime_type = 'application/json'
         elif path.endswith('.map'):
             mime_type = 'application/json'
             
-        # Split the path into components
-        path_parts = path.split('/')
-        if len(path_parts) > 1:
-            # If path is like 'js/main.4f93416e.js' or 'css/main.42f26821.css'
-            # We want to serve from /app/build/static/js or /app/build/static/css
-            static_dir = os.path.join('/app/build/static', path_parts[0])
-            file_path = '/'.join(path_parts[1:])
-        else:
-            # If path is just a filename, look in both js and css directories
-            static_dir = '/app/build/static'
-            file_path = path
-            
-        print(f"Static directory: {static_dir}")
-        print(f"File path: {file_path}")
-        print(f"Directory exists: {os.path.exists(static_dir)}")
-        
-        # Try to find the file in the appropriate directory
+        # Construct the full path
+        static_dir = os.path.join('/app/build/static', static_type)
         full_path = os.path.join(static_dir, file_path)
-        print(f"Full path to file: {full_path}")
+        
+        print(f"Static type: {static_type}")
+        print(f"File path: {file_path}")
+        print(f"Static directory: {static_dir}")
+        print(f"Full path: {full_path}")
+        print(f"Directory exists: {os.path.exists(static_dir)}")
         print(f"File exists: {os.path.exists(full_path)}")
         print(f"MIME type: {mime_type}")
         
-        if os.path.exists(full_path):
-            print(f"Serving file from {static_dir}")
-            response = send_from_directory(static_dir, file_path, mimetype=mime_type)
-            # Add cache control headers
-            response.headers['Cache-Control'] = 'public, max-age=31536000'
-            return response
-        else:
+        if not os.path.exists(static_dir):
+            print(f"Static directory does not exist: {static_dir}")
+            return f"Static directory does not exist: {static_dir}", 404
+            
+        if not os.path.exists(full_path):
             print(f"File not found: {full_path}")
-            return f"File not found: {path}", 404
+            return f"File not found: {full_path}", 404
+            
+        print(f"Serving file from {static_dir}")
+        response = send_from_directory(static_dir, file_path, mimetype=mime_type)
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        return response
     except Exception as e:
         print(f"Error serving static file: {str(e)}")
         traceback.print_exc()
