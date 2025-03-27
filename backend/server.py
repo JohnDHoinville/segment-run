@@ -803,14 +803,14 @@ def serve_chunk_js():
             
         headers['Access-Control-Allow-Credentials'] = 'true'
         
-        # Check multiple locations
-        if os.path.exists(os.path.join('static/js', js_file)):
-            return send_from_directory('static/js', js_file, headers=headers)
-        elif os.path.exists(os.path.join('backend/static/js', js_file)):
-            return send_from_directory('backend/static/js', js_file, headers=headers)
-        else:
-            print(f"Chunk JS file not found: {js_file}")
-            return jsonify({"error": "Chunk JS file not found"}), 404
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/js/488.7dee82e4.chunk.js'
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            return send_from_directory('/app/backend/static/js', js_file, headers=headers)
+            
+        print(f"Chunk JS file not found: {js_file}")
+        return jsonify({"error": "Chunk JS file not found"}), 404
     except Exception as e:
         print(f"Error serving chunk JS file: {str(e)}")
         traceback.print_exc()
