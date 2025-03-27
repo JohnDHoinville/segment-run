@@ -146,6 +146,7 @@ def serve(path):
     print(f"\n=== React App Request ===")
     print(f"Requested path: {path}")
     print(f"Current working directory: {os.getcwd()}")
+    print(f"Request headers: {dict(request.headers)}")
     
     try:
         # First check if it's a static file request
@@ -168,6 +169,9 @@ def serve(path):
             # Add cache control headers for static assets
             if path.endswith(('.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.ico')):
                 response.headers['Cache-Control'] = 'public, max-age=31536000'
+                # Ensure correct content type for JavaScript files
+                if path.endswith('.js'):
+                    response.headers['Content-Type'] = 'application/javascript'
             return response
         
         # Finally, serve index.html for all other routes
