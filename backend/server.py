@@ -510,8 +510,8 @@ def analyze():
         
         # Try to get the profile with a direct connection check
         try:
-            profile = db.get_profile(session['user_id'])
-            print("\nProfile data:", profile)
+        profile = db.get_profile(session['user_id'])
+        print("\nProfile data:", profile)
         except Exception as profile_error:
             print(f"Error getting profile: {str(profile_error)}")
             # Create default profile if fetch fails
@@ -954,46 +954,121 @@ def favicon():
             status=204,
         )
 
-# Handle manifest.json, robots.txt and other root static files
 @app.route('/manifest.json')
+def serve_manifest_json():
+    """Serve a valid manifest.json file for the web application."""
+    try:
+        from manifest_server import get_manifest_json
+        content = get_manifest_json()
+        
+        response = app.response_class(
+            response=content,
+            status=200,
+            mimetype='application/json'
+        )
+        
+        # Set proper headers for caching
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        return response
+        
+    except Exception as e:
+        print(f"Error serving manifest.json: {str(e)}")
+        traceback.print_exc()
+        
+        # Return a minimal valid manifest as fallback
+        minimal_manifest = {
+            "short_name": "GPX4U",
+            "name": "GPX4U Running Analysis",
+            "icons": [],
+            "start_url": ".",
+            "display": "standalone",
+            "theme_color": "#000000",
+            "background_color": "#ffffff"
+        }
+        
+        response = jsonify(minimal_manifest)
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        return response
+
 @app.route('/robots.txt')
+def serve_robots_txt():
+    """Serve the robots.txt file."""
+    try:
+        # First check if file exists in static directory
+        static_path = os.path.join('static', 'robots.txt')
+        
+        if os.path.exists(static_path):
+            with open(static_path, 'r') as f:
+                content = f.read()
+        else:
+            # Provide a default robots.txt if file not found
+            content = "User-agent: *\nAllow: /"
+            
+        response = app.response_class(
+            response=content,
+            status=200,
+            mimetype='text/plain'
+        )
+        
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        return response
+        
+    except Exception as e:
+        print(f"Error serving robots.txt: {str(e)}")
+        traceback.print_exc()
+        
+        # Return a default robots.txt as fallback
+        content = "User-agent: *\nAllow: /"
+        
+        response = app.response_class(
+            response=content,
+            status=200,
+            mimetype='text/plain'
+        )
+        
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        return response
+
 @app.route('/logo192.png')
 @app.route('/logo512.png')
-def handle_react_static_files():
+def serve_logo_files():
+    """Serve the logo files."""
     try:
         # Get the filename from the request path
         filename = request.path.lstrip('/')
         
-        # Check if the file exists in the static directory
-        if os.path.exists(os.path.join('static', filename)):
-            response = send_from_directory('static', filename)
-            
-            # Set proper cache headers
-            response.headers['Cache-Control'] = 'public, max-age=31536000'
-            
-            # Set appropriate content type
-            if filename.endswith('.json'):
-                response.headers['Content-Type'] = 'application/json'
-            elif filename.endswith('.txt'):
-                response.headers['Content-Type'] = 'text/plain'
-            elif filename.endswith('.png'):
-                response.headers['Content-Type'] = 'image/png'
+        # List of possible paths to check
+        paths_to_check = [
+            os.path.join('static', filename),
+            os.path.join('backend/static', filename),
+            os.path.join('/app/backend/static', filename),
+            os.path.join('/app/static', filename)
+        ]
+        
+        # Try each path until we find the file
+        for path in paths_to_check:
+            if os.path.exists(path):
+                dir_path, file_name = os.path.split(path)
+                response = send_from_directory(dir_path, file_name)
+                response.headers['Cache-Control'] = 'public, max-age=31536000'
+                return response
                 
-            return response
-        else:
-            # Return empty response if file doesn't exist
-            return app.response_class(
-                response='',
-                status=204
-            )
+        # If we get here, return a 204 No Content
+        return app.response_class(
+            response='',
+            status=204
+        )
+        
     except Exception as e:
-        print(f"Error serving static file {filename}: {str(e)}")
+        print(f"Error serving logo file: {str(e)}")
+        traceback.print_exc()
+        
+        # Return a 204 No Content on error
         return app.response_class(
             response='',
             status=204
         )
 
-# Explicit routes for the specific static files
 @app.route('/static/js/main.ed081796.js')
 def serve_main_js():
     try:
