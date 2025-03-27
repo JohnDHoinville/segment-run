@@ -145,38 +145,64 @@ def serve(path):
             static_path = path[7:]  # Remove 'static/' prefix
             return serve_static(static_path)
         
-        # For all other routes, serve index.html
-        response = None
+        # For non-API routes, serve index.html
+        # Skip API routes
+        if path and (path.startswith('api/') or path == 'analyze' or path == 'login' or path == 'register'):
+            # Let Flask handle API routes
+            return app.response_class(
+                response="API Endpoint",
+                status=404
+            )
         
-        # Try multiple locations for index.html
-        possible_paths = [
-            os.path.join('templates', 'index.html'),
-            'index.html',
-            os.path.join('backend', 'templates', 'index.html'),
-            os.path.join('build', 'index.html')
-        ]
-        
-        for html_path in possible_paths:
-            if os.path.exists(html_path):
-                print(f"Found index.html at: {html_path}")
-                if '/' in html_path:
-                    dir_path, file_name = html_path.rsplit('/', 1)
-                    response = send_from_directory(dir_path, file_name)
-                else:
-                    response = send_from_directory('.', html_path)
-                break
-        
-        if response is None:
-            # If we still don't have a response, return a minimal HTML page
-            print("No index.html found, returning minimal HTML")
+        # Try to find and serve index.html
+        try:
+            # Directly serve from templates directory which we know exists
+            if os.path.exists('templates/index.html'):
+                print("Serving index.html from templates directory")
+                response = send_from_directory('templates', 'index.html')
+            else:
+                # Create a simple HTML page
+                print("No index.html found, returning minimal HTML page")
+                html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>GPX4U</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+                        h1 { color: #4285f4; }
+                    </style>
+                </head>
+                <body>
+                    <h1>GPX4U Running Analysis</h1>
+                    <p>Welcome to GPX4U, your running data analysis platform.</p>
+                    <p>The application is currently being configured. Please try again in a few moments.</p>
+                </body>
+                </html>
+                """
+                response = app.response_class(
+                    response=html,
+                    status=200,
+                    mimetype='text/html'
+                )
+        except Exception as inner_e:
+            print(f"Error serving index.html: {str(inner_e)}")
+            traceback.print_exc()
+            # Return a simple HTML page on error
             html = """
             <!DOCTYPE html>
             <html>
-            <head><title>GPX4U</title></head>
+            <head>
+                <title>GPX4U</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+                    h1 { color: #4285f4; }
+                </style>
+            </head>
             <body>
-                <h1>GPX4U</h1>
-                <p>Welcome to GPX4U. The application is currently being set up.</p>
-                <p>Please try again shortly or contact support if the issue persists.</p>
+                <h1>GPX4U Running Analysis</h1>
+                <p>Welcome to GPX4U, your running data analysis platform.</p>
+                <p>The application is currently being configured. Please try again in a few moments.</p>
             </body>
             </html>
             """
@@ -203,17 +229,24 @@ def serve(path):
         return response
         
     except Exception as e:
-        print(f"Error serving file: {str(e)}")
+        print(f"Critical error serving app: {str(e)}")
         traceback.print_exc()
-        # Return a minimal error page instead of 500 error
-        html = f"""
+        
+        # Return a simple HTML page on critical error
+        html = """
         <!DOCTYPE html>
         <html>
-        <head><title>GPX4U - Error</title></head>
+        <head>
+            <title>GPX4U</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+                h1 { color: #4285f4; }
+            </style>
+        </head>
         <body>
-            <h1>GPX4U - Error</h1>
-            <p>An error occurred while loading the application.</p>
-            <p>Please try again shortly or contact support if the issue persists.</p>
+            <h1>GPX4U Running Analysis</h1>
+            <p>Welcome to GPX4U, your running data analysis platform.</p>
+            <p>The application is currently being configured. Please try again in a few moments.</p>
         </body>
         </html>
         """
@@ -222,6 +255,22 @@ def serve(path):
             status=200,
             mimetype='text/html'
         )
+        
+        # Try to set CORS headers even on error
+        try:
+            origin = request.headers.get('Origin', '')
+            allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+            
+            if origin in allowed_origins:
+                response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Vary'] = 'Origin'
+        except:
+            pass
+            
         return response
 
 @app.route('/test', methods=['GET'])
