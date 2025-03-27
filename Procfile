@@ -1,1 +1,1 @@
-web: mkdir -p /app/build/static/css /app/build/static/js && cp -r build/static/css/* /app/build/static/css/ && cp -r build/static/js/* /app/build/static/js/ && cd backend && PYTHONPATH=/app gunicorn server:app
+web: cd backend && PYTHONPATH=/app gunicorn server:app
