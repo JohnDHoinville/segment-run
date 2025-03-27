@@ -93,21 +93,39 @@ def serve_static(filename):
         print(f"\n=== Static File Request ===")
         print(f"Requested file: {filename}")
         print(f"Current working directory: {os.getcwd()}")
-        print(f"Static directory exists: {os.path.exists('static')}")
-        if os.path.exists('static'):
-            print(f"Static directory contents: {os.listdir('static')}")
-        print(f"Backend/static exists: {os.path.exists('backend/static')}")
-        if os.path.exists('backend/static'):
-            print(f"Backend/static contents: {os.listdir('backend/static')}")
+        
+        # Set CORS headers based on the request origin
+        response = None
+        origin = request.headers.get('Origin')
+        allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
         
         # Try both locations
         if os.path.exists(os.path.join('static', filename)):
-            return send_from_directory('static', filename)
+            response = send_from_directory('static', filename)
         elif os.path.exists(os.path.join('backend/static', filename)):
-            return send_from_directory('backend/static', filename)
+            response = send_from_directory('backend/static', filename)
         else:
             print(f"File not found in either location: {filename}")
             return jsonify({"error": "File not found"}), 404
+            
+        # Set CORS headers
+        if origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
+        
+        # Set cache control headers
+        if filename.endswith(('.js', '.css')):
+            response.headers['Cache-Control'] = 'public, max-age=31536000'
+            if filename.endswith('.js'):
+                response.headers['Content-Type'] = 'application/javascript'
+            elif filename.endswith('.css'):
+                response.headers['Content-Type'] = 'text/css'
+                
+        return response
+        
     except Exception as e:
         print(f"Error serving static file {filename}: {str(e)}")
         traceback.print_exc()
