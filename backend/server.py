@@ -94,12 +94,34 @@ def serve_static(filename):
         origin = request.headers.get('Origin', '')
         allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
         
-        # Try to serve from the static directory which exists (from test output)
-        if os.path.exists(os.path.join('static', filename)):
-            response = send_from_directory('static', filename)
+        # Determine file type for correct directory handling
+        file_type = None
+        if '/' in filename:
+            parts = filename.split('/')
+            if len(parts) > 1:
+                file_type = parts[0]  # css or js or media
+                
+        # Try different locations based on file type
+        if file_type:
+            # Handle nested paths like css/main.123.css
+            if os.path.exists(os.path.join('static', filename)):
+                response = send_from_directory('static', filename)
+            else:
+                print(f"File not found in static directory: {filename}")
+                return jsonify({"error": "File not found"}), 404
         else:
-            print(f"File not found: {filename}")
-            return jsonify({"error": "File not found"}), 404
+            # Direct files like main.css
+            if os.path.exists(os.path.join('static', 'css', filename)):
+                response = send_from_directory(os.path.join('static', 'css'), filename)
+            elif os.path.exists(os.path.join('static', 'js', filename)):
+                response = send_from_directory(os.path.join('static', 'js'), filename)
+            elif os.path.exists(os.path.join('static', 'media', filename)):
+                response = send_from_directory(os.path.join('static', 'media'), filename)
+            elif os.path.exists(os.path.join('static', filename)):
+                response = send_from_directory('static', filename)
+            else:
+                print(f"File not found in any static directory: {filename}")
+                return jsonify({"error": "File not found"}), 404
             
         # Set CORS headers for all responses
         if origin in allowed_origins:
@@ -111,13 +133,27 @@ def serve_static(filename):
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Vary'] = 'Origin'
         
-        # Set content type headers
+        # Set content type headers based on file extension
         if filename.endswith('.js'):
             response.headers['Content-Type'] = 'application/javascript'
         elif filename.endswith('.css'):
             response.headers['Content-Type'] = 'text/css'
+        elif filename.endswith('.png'):
+            response.headers['Content-Type'] = 'image/png'
+        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+            response.headers['Content-Type'] = 'image/jpeg'
+        elif filename.endswith('.svg'):
+            response.headers['Content-Type'] = 'image/svg+xml'
+        elif filename.endswith('.woff'):
+            response.headers['Content-Type'] = 'font/woff'
+        elif filename.endswith('.woff2'):
+            response.headers['Content-Type'] = 'font/woff2'
+        elif filename.endswith('.ttf'):
+            response.headers['Content-Type'] = 'font/ttf'
+        elif filename.endswith('.ico'):
+            response.headers['Content-Type'] = 'image/x-icon'
         
-        # Add caching headers
+        # Add caching headers for static assets
         response.headers['Cache-Control'] = 'public, max-age=31536000'
                 
         return response
@@ -140,43 +176,58 @@ def serve(path):
         origin = request.headers.get('Origin', '')
         allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
         
-        # Handle static file requests
+        # Handle static file requests directly
         if path.startswith('static/'):
             static_path = path[7:]  # Remove 'static/' prefix
             return serve_static(static_path)
         
-        # For non-API routes, serve index.html
-        # Skip API routes
-        if path and (path.startswith('api/') or path == 'analyze' or path == 'login' or path == 'register'):
+        # API paths that should be handled by the backend routes
+        api_paths = ['analyze', 'login', 'register', 'profile', 'runs', 'compare', 'logout', 'test']
+        
+        # For non-API routes, serve index.html (React routing will handle it)
+        if path and any(path.startswith(api_path) for api_path in api_paths):
             # Let Flask handle API routes
+            print(f"API route detected: {path}")
             return app.response_class(
                 response="API Endpoint",
                 status=404
             )
         
-        # Try to find and serve index.html
+        # If we get here, serve the React app (let React Router handle client-side routing)
         try:
-            # Directly serve from templates directory which we know exists
+            # Try different possible locations for index.html
             if os.path.exists('templates/index.html'):
                 print("Serving index.html from templates directory")
                 response = send_from_directory('templates', 'index.html')
             else:
-                # Create a simple HTML page
-                print("No index.html found, returning minimal HTML page")
+                print("No index.html found, creating fallback HTML page")
                 html = """
                 <!DOCTYPE html>
-                <html>
+                <html lang="en">
                 <head>
-                    <title>GPX4U</title>
+                    <meta charset="utf-8" />
+                    <meta name="viewport" content="width=device-width, initial-scale=1" />
+                    <title>GPX4U - Running Analysis</title>
                     <style>
-                        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-                        h1 { color: #4285f4; }
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
+                        .app { max-width: 960px; margin: 0 auto; padding: 20px; }
+                        .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
+                        h1 { margin: 0; }
+                        p { line-height: 1.6; color: #333; }
+                        .container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
                     </style>
                 </head>
                 <body>
-                    <h1>GPX4U Running Analysis</h1>
-                    <p>Welcome to GPX4U, your running data analysis platform.</p>
-                    <p>The application is currently being configured. Please try again in a few moments.</p>
+                    <div class="app">
+                        <div class="header">
+                            <h1>GPX4U Running Analysis</h1>
+                        </div>
+                        <div class="container">
+                            <h2>Welcome to GPX4U</h2>
+                            <p>Your running data analysis platform is being configured.</p>
+                            <p>Please check back shortly or contact support if you continue to see this message.</p>
+                        </div>
+                    </div>
                 </body>
                 </html>
                 """
@@ -191,18 +242,31 @@ def serve(path):
             # Return a simple HTML page on error
             html = """
             <!DOCTYPE html>
-            <html>
+            <html lang="en">
             <head>
-                <title>GPX4U</title>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>GPX4U - Running Analysis</title>
                 <style>
-                    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-                    h1 { color: #4285f4; }
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
+                    .app { max-width: 960px; margin: 0 auto; padding: 20px; }
+                    .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
+                    h1 { margin: 0; }
+                    p { line-height: 1.6; color: #333; }
+                    .container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
                 </style>
             </head>
             <body>
-                <h1>GPX4U Running Analysis</h1>
-                <p>Welcome to GPX4U, your running data analysis platform.</p>
-                <p>The application is currently being configured. Please try again in a few moments.</p>
+                <div class="app">
+                    <div class="header">
+                        <h1>GPX4U Running Analysis</h1>
+                    </div>
+                    <div class="container">
+                        <h2>Welcome to GPX4U</h2>
+                        <p>Your running data analysis platform is being configured.</p>
+                        <p>Please check back shortly or contact support if you continue to see this message.</p>
+                    </div>
+                </div>
             </body>
             </html>
             """
@@ -235,18 +299,31 @@ def serve(path):
         # Return a simple HTML page on critical error
         html = """
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
-            <title>GPX4U</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>GPX4U - Running Analysis</title>
             <style>
-                body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-                h1 { color: #4285f4; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
+                .app { max-width: 960px; margin: 0 auto; padding: 20px; }
+                .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
+                h1 { margin: 0; }
+                p { line-height: 1.6; color: #333; }
+                .container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
             </style>
         </head>
         <body>
-            <h1>GPX4U Running Analysis</h1>
-            <p>Welcome to GPX4U, your running data analysis platform.</p>
-            <p>The application is currently being configured. Please try again in a few moments.</p>
+            <div class="app">
+                <div class="header">
+                    <h1>GPX4U Running Analysis</h1>
+                </div>
+                <div class="container">
+                    <h2>Welcome to GPX4U</h2>
+                    <p>Your running data analysis platform is being configured.</p>
+                    <p>Please check back shortly or contact support if you continue to see this message.</p>
+                </div>
+            </div>
         </body>
         </html>
         """
@@ -528,14 +605,29 @@ def save_profile():
 @app.route('/favicon.ico')
 def favicon():
     try:
-        return send_from_directory('static', 'favicon.ico')
-    except:
-        # Return an empty response if favicon doesn't exist
-        response = app.response_class(
+        # Try different possible locations for favicon.ico
+        if os.path.exists('static/favicon.ico'):
+            response = send_from_directory('static', 'favicon.ico')
+        elif os.path.exists('public/favicon.ico'):
+            response = send_from_directory('public', 'favicon.ico')
+        else:
+            # Return an empty response if favicon doesn't exist
+            response = app.response_class(
+                response='',
+                status=204,
+            )
+            
+        # Set proper content type and cache headers
+        response.headers['Content-Type'] = 'image/x-icon'
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        return response
+    except Exception as e:
+        print(f"Error serving favicon: {str(e)}")
+        # Return empty response on error
+        return app.response_class(
             response='',
             status=204,
         )
-        return response
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
