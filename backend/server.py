@@ -107,11 +107,6 @@ def serve_static(filename):
             
         headers['Access-Control-Allow-Credentials'] = 'true'
         
-        # Debug the request
-        print(f"Request path: {request.path}")
-        print(f"Request full URL: {request.url}")
-        print(f"Request headers: {dict(request.headers)}")
-        
         # Add content type based on file extension
         if filename.endswith('.js'):
             print(f"Setting Content-Type for JS file")
@@ -139,7 +134,13 @@ def serve_static(filename):
             os.path.join('static/css', filename if not filename.startswith('css/') else filename[4:]),
             os.path.join('backend/static', filename),
             os.path.join('backend/static/js', filename if not filename.startswith('js/') else filename[3:]),
-            os.path.join('backend/static/css', filename if not filename.startswith('css/') else filename[4:])
+            os.path.join('backend/static/css', filename if not filename.startswith('css/') else filename[4:]),
+            os.path.join('/app/backend/static', filename),
+            os.path.join('/app/backend/static/js', filename if not filename.startswith('js/') else filename[3:]),
+            os.path.join('/app/backend/static/css', filename if not filename.startswith('css/') else filename[4:]),
+            os.path.join('/app/static', filename),
+            os.path.join('/app/static/js', filename if not filename.startswith('js/') else filename[3:]),
+            os.path.join('/app/static/css', filename if not filename.startswith('css/') else filename[4:])
         ]
         
         print(f"Paths to check: {paths_to_check}")
@@ -154,7 +155,7 @@ def serve_static(filename):
                 
         # If we get here, file was not found
         print(f"File not found: {filename}")
-        print(f"Static dir contents: {os.listdir('static')}")
+        print(f"Static dir contents: {os.listdir('static') if os.path.exists('static') else 'directory not found'}")
         if os.path.exists('static/js'):
             print(f"JS dir contents: {os.listdir('static/js')}")
         if os.path.exists('static/css'):
@@ -729,15 +730,27 @@ def serve_main_js():
         headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Check multiple locations
-        if os.path.exists(os.path.join('static/js', js_file)):
-            return send_from_directory('static/js', js_file, headers=headers)
-        elif os.path.exists(os.path.join('backend/static/js', js_file)):
-            return send_from_directory('backend/static/js', js_file, headers=headers)
-        else:
-            print(f"Main JS file not found: {js_file}")
-            print(f"Current directory: {os.getcwd()}")
-            print(f"Static/js contents: {os.listdir('static/js') if os.path.exists('static/js') else 'directory not found'}")
-            return jsonify({"error": "Main JS file not found"}), 404
+        paths_to_check = [
+            os.path.join('static/js', js_file),
+            os.path.join('backend/static/js', js_file),
+            os.path.join('../static/js', js_file),
+            os.path.join('../../static/js', js_file),
+            os.path.join('/app/backend/static/js', js_file),
+            os.path.join('/app/static/js', js_file)
+        ]
+        
+        print(f"Checking paths: {paths_to_check}")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        for path in paths_to_check:
+            if os.path.exists(path):
+                print(f"Found file at: {path}")
+                dir_path, file_name = os.path.split(path)
+                return send_from_directory(dir_path, file_name, headers=headers)
+                
+        print(f"Main JS file not found: {js_file}")
+        print(f"Static/js contents: {os.listdir('static/js') if os.path.exists('static/js') else 'directory not found'}")
+        return jsonify({"error": "Main JS file not found"}), 404
     except Exception as e:
         print(f"Error serving main JS file: {str(e)}")
         traceback.print_exc()
@@ -768,15 +781,27 @@ def serve_main_css():
         headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Check multiple locations
-        if os.path.exists(os.path.join('static/css', css_file)):
-            return send_from_directory('static/css', css_file, headers=headers)
-        elif os.path.exists(os.path.join('backend/static/css', css_file)):
-            return send_from_directory('backend/static/css', css_file, headers=headers)
-        else:
-            print(f"Main CSS file not found: {css_file}")
-            print(f"Current directory: {os.getcwd()}")
-            print(f"Static/css contents: {os.listdir('static/css') if os.path.exists('static/css') else 'directory not found'}")
-            return jsonify({"error": "Main CSS file not found"}), 404
+        paths_to_check = [
+            os.path.join('static/css', css_file),
+            os.path.join('backend/static/css', css_file),
+            os.path.join('../static/css', css_file),
+            os.path.join('../../static/css', css_file),
+            os.path.join('/app/backend/static/css', css_file),
+            os.path.join('/app/static/css', css_file)
+        ]
+        
+        print(f"Checking paths: {paths_to_check}")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        for path in paths_to_check:
+            if os.path.exists(path):
+                print(f"Found file at: {path}")
+                dir_path, file_name = os.path.split(path)
+                return send_from_directory(dir_path, file_name, headers=headers)
+                
+        print(f"Main CSS file not found: {css_file}")
+        print(f"Static/css contents: {os.listdir('static/css') if os.path.exists('static/css') else 'directory not found'}")
+        return jsonify({"error": "Main CSS file not found"}), 404
     except Exception as e:
         print(f"Error serving main CSS file: {str(e)}")
         traceback.print_exc()
