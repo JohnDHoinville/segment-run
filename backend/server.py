@@ -729,27 +729,13 @@ def serve_main_js():
             
         headers['Access-Control-Allow-Credentials'] = 'true'
         
-        # Check multiple locations
-        paths_to_check = [
-            os.path.join('static/js', js_file),
-            os.path.join('backend/static/js', js_file),
-            os.path.join('../static/js', js_file),
-            os.path.join('../../static/js', js_file),
-            os.path.join('/app/backend/static/js', js_file),
-            os.path.join('/app/static/js', js_file)
-        ]
-        
-        print(f"Checking paths: {paths_to_check}")
-        print(f"Current working directory: {os.getcwd()}")
-        
-        for path in paths_to_check:
-            if os.path.exists(path):
-                print(f"Found file at: {path}")
-                dir_path, file_name = os.path.split(path)
-                return send_from_directory(dir_path, file_name, headers=headers)
-                
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/js/main.4f93416e.js'
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            return send_from_directory('/app/backend/static/js', js_file, headers=headers)
+            
         print(f"Main JS file not found: {js_file}")
-        print(f"Static/js contents: {os.listdir('static/js') if os.path.exists('static/js') else 'directory not found'}")
         return jsonify({"error": "Main JS file not found"}), 404
     except Exception as e:
         print(f"Error serving main JS file: {str(e)}")
@@ -780,27 +766,13 @@ def serve_main_css():
             
         headers['Access-Control-Allow-Credentials'] = 'true'
         
-        # Check multiple locations
-        paths_to_check = [
-            os.path.join('static/css', css_file),
-            os.path.join('backend/static/css', css_file),
-            os.path.join('../static/css', css_file),
-            os.path.join('../../static/css', css_file),
-            os.path.join('/app/backend/static/css', css_file),
-            os.path.join('/app/static/css', css_file)
-        ]
-        
-        print(f"Checking paths: {paths_to_check}")
-        print(f"Current working directory: {os.getcwd()}")
-        
-        for path in paths_to_check:
-            if os.path.exists(path):
-                print(f"Found file at: {path}")
-                dir_path, file_name = os.path.split(path)
-                return send_from_directory(dir_path, file_name, headers=headers)
-                
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/css/main.42f26821.css'
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            return send_from_directory('/app/backend/static/css', css_file, headers=headers)
+            
         print(f"Main CSS file not found: {css_file}")
-        print(f"Static/css contents: {os.listdir('static/css') if os.path.exists('static/css') else 'directory not found'}")
         return jsonify({"error": "Main CSS file not found"}), 404
     except Exception as e:
         print(f"Error serving main CSS file: {str(e)}")
