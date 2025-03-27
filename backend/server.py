@@ -44,14 +44,14 @@ app.secret_key = secrets.token_hex(32)
 
 # Configure CORS
 CORS(app,
-    origins=["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
+    origins=["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "*"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Cache-Control"],
     supports_credentials=True,
     expose_headers=["Content-Type", "Authorization", "Cache-Control"],
     resources={
         r"/*": {
-            "origins": ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
+            "origins": ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "*"],
             "methods": ["GET", "POST", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
             "supports_credentials": True,
@@ -90,74 +90,54 @@ def serve_static(filename):
         print(f"Requested file: {filename}")
         print(f"Current working directory: {os.getcwd()}")
         
-        # Get request origin
-        origin = request.headers.get('Origin', '')
-        allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        # Default CORS headers - set to allow the current host
+        headers = {
+            'Access-Control-Allow-Origin': request.headers.get('Origin', '*'),
+            'Access-Control-Allow-Credentials': 'true',
+            'Vary': 'Origin',
+            'Cache-Control': 'public, max-age=31536000'
+        }
         
-        # Determine file type for correct directory handling
-        file_type = None
-        if '/' in filename:
-            parts = filename.split('/')
-            if len(parts) > 1:
-                file_type = parts[0]  # css or js or media
+        # Try to serve the file from our static directory structure
+        try:
+            # First try: handle js/filename.js pattern
+            if filename.startswith('js/'):
+                js_file = filename[3:]  # Remove 'js/' prefix
+                if os.path.exists(os.path.join('static/js', js_file)):
+                    return send_from_directory('static/js', js_file, headers=headers)
                 
-        # Try different locations based on file type
-        if file_type:
-            # Handle nested paths like css/main.123.css
-            if os.path.exists(os.path.join('static', filename)):
-                response = send_from_directory('static', filename)
-            else:
-                print(f"File not found in static directory: {filename}")
-                return jsonify({"error": "File not found"}), 404
-        else:
-            # Direct files like main.css
-            if os.path.exists(os.path.join('static', 'css', filename)):
-                response = send_from_directory(os.path.join('static', 'css'), filename)
-            elif os.path.exists(os.path.join('static', 'js', filename)):
-                response = send_from_directory(os.path.join('static', 'js'), filename)
-            elif os.path.exists(os.path.join('static', 'media', filename)):
-                response = send_from_directory(os.path.join('static', 'media'), filename)
+            # Second try: handle css/filename.css pattern
+            elif filename.startswith('css/'):
+                css_file = filename[4:]  # Remove 'css/' prefix
+                if os.path.exists(os.path.join('static/css', css_file)):
+                    return send_from_directory('static/css', css_file, headers=headers)
+                    
+            # Direct path: try to find the file directly in static directory
             elif os.path.exists(os.path.join('static', filename)):
-                response = send_from_directory('static', filename)
-            else:
-                print(f"File not found in any static directory: {filename}")
-                return jsonify({"error": "File not found"}), 404
-            
-        # Set CORS headers for all responses
-        if origin in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            # Default to the production domain
-            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Vary'] = 'Origin'
-        
-        # Set content type headers based on file extension
-        if filename.endswith('.js'):
-            response.headers['Content-Type'] = 'application/javascript'
-        elif filename.endswith('.css'):
-            response.headers['Content-Type'] = 'text/css'
-        elif filename.endswith('.png'):
-            response.headers['Content-Type'] = 'image/png'
-        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
-            response.headers['Content-Type'] = 'image/jpeg'
-        elif filename.endswith('.svg'):
-            response.headers['Content-Type'] = 'image/svg+xml'
-        elif filename.endswith('.woff'):
-            response.headers['Content-Type'] = 'font/woff'
-        elif filename.endswith('.woff2'):
-            response.headers['Content-Type'] = 'font/woff2'
-        elif filename.endswith('.ttf'):
-            response.headers['Content-Type'] = 'font/ttf'
-        elif filename.endswith('.ico'):
-            response.headers['Content-Type'] = 'image/x-icon'
-        
-        # Add caching headers for static assets
-        response.headers['Cache-Control'] = 'public, max-age=31536000'
+                return send_from_directory('static', filename, headers=headers)
                 
-        return response
-        
+            # Try subdirectories if not found directly
+            if os.path.exists(os.path.join('static/js', filename)):
+                return send_from_directory('static/js', filename, headers=headers)
+            elif os.path.exists(os.path.join('static/css', filename)):
+                return send_from_directory('static/css', filename, headers=headers)
+                
+            # If we get here, file was not found
+            print(f"File not found: {filename}")
+            print(f"Tried paths: static/{filename}, static/js/{filename}, static/css/{filename}")
+            print(f"Static dir contents: {os.listdir('static')}")
+            if os.path.exists('static/js'):
+                print(f"JS dir contents: {os.listdir('static/js')}")
+            if os.path.exists('static/css'):
+                print(f"CSS dir contents: {os.listdir('static/css')}")
+                
+            return jsonify({"error": "File not found"}), 404
+                
+        except Exception as inner_e:
+            print(f"Error in file lookup: {str(inner_e)}")
+            traceback.print_exc()
+            return jsonify({"error": str(inner_e)}), 500
+            
     except Exception as e:
         print(f"Error serving static file {filename}: {str(e)}")
         traceback.print_exc()

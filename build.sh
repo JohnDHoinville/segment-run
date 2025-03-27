@@ -9,45 +9,57 @@ npm run build
 
 # Create necessary directories
 echo "📁 Creating directories..."
-mkdir -p backend/static/css
+mkdir -p backend/static
 mkdir -p backend/static/js
+mkdir -p backend/static/css
 mkdir -p backend/templates
-mkdir -p static/css
+mkdir -p static
 mkdir -p static/js
+mkdir -p static/css
 mkdir -p templates
 
 # Copy static files from React build to both locations
 echo "📋 Copying static files..."
-cp -r build/static/css/* backend/static/css/
+
+# First copy static directory structure as is
+cp -r build/static/* static/
+
+# Then copy individual files to maintain JS/CSS directories
 cp -r build/static/css/* static/css/
-cp -r build/static/js/* backend/static/js/
 cp -r build/static/js/* static/js/
 
-# Copy any other static assets
-if [ -d "build/static/media" ]; then
-  mkdir -p backend/static/media
-  mkdir -p static/media
-  cp -r build/static/media/* backend/static/media/
-  cp -r build/static/media/* static/media/
-fi
+# Copy to backend directories too
+cp -r build/static/* backend/static/
+cp -r build/static/css/* backend/static/css/
+cp -r build/static/js/* backend/static/js/
 
-# Copy favicon if it exists
-if [ -f "build/favicon.ico" ]; then
-  cp build/favicon.ico backend/static/
-  cp build/favicon.ico static/
-fi
+# Copy other static assets
+for file in build/*.{ico,json,png}; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "Copying $filename to static and backend/static directories"
+    cp "$file" static/
+    cp "$file" backend/static/
+  fi
+done
 
-# Modify index.html to fix paths before copying
+# Fix paths in index.html - try multiple approaches to ensure compatibility
 echo "📄 Fixing paths in index.html..."
-sed -i -e 's|="/static/|="static/|g' build/index.html
-sed -i -e 's|="/favicon.ico"|="favicon.ico"|g' build/index.html
-sed -i -e 's|="/manifest.json"|="manifest.json"|g' build/index.html
-sed -i -e 's|="/logo192.png"|="logo192.png"|g' build/index.html
+
+# Make a backup of original index.html
+cp build/index.html build/index.html.original
+
+# Method 1: Remove leading slashes from paths
+sed -e 's|="/static/|="static/|g' \
+    -e 's|="/favicon.ico"|="favicon.ico"|g' \
+    -e 's|="/manifest.json"|="manifest.json"|g' \
+    -e 's|="/logo192.png"|="logo192.png"|g' \
+    build/index.html.original > build/index.html
 
 # Copy modified index.html to templates directories
 echo "📄 Copying modified index.html..."
-cp build/index.html backend/templates/
 cp build/index.html templates/
+cp build/index.html backend/templates/
 
 echo "✅ Build complete!"
 echo "📝 Static files are now in both static/ and backend/static/ directories"
