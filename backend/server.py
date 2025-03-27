@@ -69,16 +69,31 @@ def login_required(f):
 # Serve static files
 @app.route('/static/<path:path>')
 def serve_static(path):
+    print(f"Attempting to serve static file: {path}")
+    static_path = os.path.join('/app/build/static', path)
+    print(f"Full static path: {static_path}")
+    print(f"File exists: {os.path.exists(static_path)}")
     return send_from_directory('/app/build/static', path)
 
 # Serve React App
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
+    print(f"Serving path: {path}")
     if path.startswith('static/'):
+        static_path = path[7:]  # Remove 'static/' prefix
+        print(f"Serving static file: {static_path}")
+        return send_from_directory('/app/build/static', static_path)
+    
+    file_path = os.path.join('/app/build', path)
+    print(f"Checking file path: {file_path}")
+    print(f"File exists: {os.path.exists(file_path)}")
+    
+    if path and os.path.exists(file_path):
+        print(f"Serving file: {path}")
         return send_from_directory('/app/build', path)
-    elif path != "" and os.path.exists(os.path.join('/app/build', path)):
-        return send_from_directory('/app/build', path)
+    
+    print("Serving index.html")
     return send_from_directory('/app/build', 'index.html')
 
 @app.route('/test', methods=['GET'])
