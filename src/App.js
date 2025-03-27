@@ -1,24 +1,39 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect, useMemo, useRef, useContext, createContext } from 'react';
-import { MapContainer, TileLayer, Polyline, useMap, Marker, Popup, Tooltip as MapTooltip } from 'react-leaflet';
-import { Chart as ChartJS, LineElement, PointElement, CategoryScale, LinearScale, TimeScale, BarElement, Tooltip as ChartTooltip, Legend, Title, TimeSeriesScale, Filler } from 'chart.js';
-import { Line, Bar, Scatter } from 'react-chartjs-2';
-import 'chart.js/auto';
+import React, { useState, createContext, useContext, useEffect, useRef, useMemo } from 'react';
 import './App.css';
-import 'leaflet/dist/leaflet.css';
-import { FaBars, FaTimes, FaUser, FaSun, FaMoon, FaMapMarkerAlt, FaFilter, FaRunning, FaHome, FaEye, FaTrash, FaPlus, FaCheck, FaTimes as FaTimesCircle } from 'react-icons/fa';
-import CustomSegments from './components/CustomSegments';
-import PaceProgressChart from './components/PaceProgressChart';
-import HeartRatePaceCorrelation from './components/HeartRatePaceCorrelation';
-import FatigueAnalysis from './components/FatigueAnalysis';
-import PaceConsistency from './components/PaceConsistency';
 import LoadingSpinner from './components/LoadingSpinner';
 import LoginForm from './components/LoginForm';
 import TrainingZones from './components/TrainingZones';
 import AdvancedMetrics from './components/AdvancedMetrics';
 import RacePredictions from './components/RacePredictions';
-import L from 'leaflet';
 import { API_URL } from './config';
+import { Bar, Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend,
+  Filler
+} from 'chart.js';
+import { 
+  MapContainer, 
+  TileLayer, 
+  Polyline,
+  Tooltip as MapTooltip,
+  Circle,
+  CircleMarker
+} from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import PaceProgressChart from './components/PaceProgressChart';
+import HeartRatePaceCorrelation from './components/HeartRatePaceCorrelation';
+import FatigueAnalysis from './components/FatigueAnalysis';
+import PaceConsistency from './components/PaceConsistency';
+import CustomSegments from './components/CustomSegments';
 
 // Register ChartJS components
 ChartJS.register(
@@ -27,8 +42,6 @@ ChartJS.register(
   BarElement,
   LineElement,
   PointElement,
-  TimeScale,
-  TimeSeriesScale,
   Title,
   ChartTooltip,
   Legend,
@@ -1051,15 +1064,27 @@ function App() {
       try {
         console.log('Checking auth at:', `${API_URL}/auth/check`);
         const response = await fetch(`${API_URL}/auth/check`, {
-          credentials: 'include'
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          mode: 'cors'
         });
+        
+        console.log('Auth check response status:', response.status);
+        console.log('Auth check response headers:', Object.fromEntries([...response.headers]));
+        
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
         const data = await response.json();
-        console.log('Auth check response:', data);
+        console.log('Auth check response data:', data);
+        
         if (data.authenticated) {
           setUserId(data.user_id);
+          setUsername(data.username || '');
           setIsAuthenticated(true);
         } else {
           setIsAuthenticated(false);
@@ -1073,7 +1098,7 @@ function App() {
       }
     };
     checkAuth();
-  }, []);
+  }, [API_URL]);
 
   // Load profile on mount
   useEffect(() => {

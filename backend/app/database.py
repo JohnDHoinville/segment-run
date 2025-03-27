@@ -2,6 +2,7 @@ import sqlite3
 import json
 from datetime import datetime
 import os
+import threading
 from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
 from json import JSONEncoder
@@ -40,6 +41,7 @@ class RunDatabase:
         self.db_name = db_name
         self.conn = None
         self.cursor = None
+        self.conn_thread_id = None
         self.connect()
         self.init_db()
 
@@ -60,12 +62,34 @@ class RunDatabase:
                 self.cursor = self.conn.cursor(cursor_factory=DictCursor)
             else:
                 # Fallback to SQLite for local development
-                self.conn = sqlite3.connect(self.db_name)
+                self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
                 self.conn.row_factory = sqlite3.Row
                 self.cursor = self.conn.cursor()
+                
+            # Store the current thread ID
+            self.conn_thread_id = threading.get_ident()
         except Exception as e:
             print(f"Error connecting to database: {e}")
             raise
+            
+    def check_connection(self):
+        """Reconnect if we're in a different thread from the one that created the connection"""
+        current_thread_id = threading.get_ident()
+        if self.conn_thread_id != current_thread_id:
+            print(f"Thread ID mismatch. Connection thread: {self.conn_thread_id}, Current thread: {current_thread_id}")
+            try:
+                # Close existing connection
+                if self.cursor:
+                    self.cursor.close()
+                if self.conn:
+                    self.conn.close()
+                    
+                # Create a new connection
+                self.connect()
+                print(f"Successfully reconnected in thread {current_thread_id}")
+            except Exception as e:
+                print(f"Error reconnecting to database: {e}")
+                raise
 
     def init_db(self):
         try:
@@ -167,6 +191,9 @@ class RunDatabase:
 
     def save_run(self, user_id, run_data):
         try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL save
                 self.cursor.execute("""
@@ -200,11 +227,18 @@ class RunDatabase:
             return self.cursor.lastrowid
         except Exception as e:
             print(f"Error saving run: {e}")
-            self.conn.rollback()
-            raise
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            return None
 
     def get_all_runs(self, user_id):
         try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
@@ -223,8 +257,12 @@ class RunDatabase:
             return [dict(run) for run in runs]
         except Exception as e:
             print(f"Error getting all runs: {e}")
-            self.conn.rollback()
-            raise
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            return []
 
     def get_run_by_id(self, run_id, user_id=None):
         try:
@@ -373,26 +411,32 @@ class RunDatabase:
 
     def verify_user(self, username, password):
         try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
-                    SELECT * FROM users 
-                    WHERE username = %s
+                    SELECT id, password_hash FROM users WHERE username = %s
                 """, (username,))
             else:
                 # SQLite query
                 self.cursor.execute("""
-                    SELECT * FROM users 
-                    WHERE username = ?
+                    SELECT id, password_hash FROM users WHERE username = ?
                 """, (username,))
+                
             user = self.cursor.fetchone()
             if user and check_password_hash(user['password_hash'], password):
-                return dict(user)
+                return user['id']
             return None
         except Exception as e:
             print(f"Error verifying user: {e}")
-            self.conn.rollback()
-            raise
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            return None
 
     def update_password(self, user_id, current_password, new_password):
         try:
@@ -474,4 +518,97 @@ class RunDatabase:
         except Exception as e:
             print(f"Error getting run: {e}")
             self.conn.rollback()
-            raise 
+            raise
+
+    def get_user_by_id(self, user_id):
+        try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT id, username, password_hash FROM users WHERE id = %s
+                """, (user_id,))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT id, username, password_hash FROM users WHERE id = ?
+                """, (user_id,))
+                
+            user = self.cursor.fetchone()
+            if user:
+                return dict(user)
+            return None
+        except Exception as e:
+            print(f"Error getting user by ID: {e}")
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            return None
+            
+    def get_user_by_username(self, username):
+        try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL query
+                self.cursor.execute("""
+                    SELECT id, username, password_hash FROM users WHERE username = %s
+                """, (username,))
+            else:
+                # SQLite query
+                self.cursor.execute("""
+                    SELECT id, username, password_hash FROM users WHERE username = ?
+                """, (username,))
+                
+            user = self.cursor.fetchone()
+            if user:
+                return dict(user)
+            return None
+        except Exception as e:
+            print(f"Error getting user by username: {e}")
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            return None
+
+    def register_user(self, username, password, email):
+        try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
+            # Hash the password
+            password_hash = generate_password_hash(password)
+            
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL insert
+                self.cursor.execute("""
+                    INSERT INTO users (username, password_hash, email)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                """, (username, password_hash, email))
+                user_id = self.cursor.fetchone()[0]
+            else:
+                # SQLite insert
+                self.cursor.execute("""
+                    INSERT INTO users (username, password_hash, email)
+                    VALUES (?, ?, ?)
+                """, (username, password_hash, email))
+                user_id = self.cursor.lastrowid
+                
+            self.conn.commit()
+            return user_id
+        except Exception as e:
+            print(f"Error registering user: {e}")
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            return None 

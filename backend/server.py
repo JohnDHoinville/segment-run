@@ -42,9 +42,21 @@ app.config.update(
 # Generate a secure random key
 app.secret_key = secrets.token_hex(32)
 
+# Define allowed origins with localhost explicitly included
+ALLOWED_ORIGINS = [
+    "https://gpx4u.com", 
+    "http://gpx4u.com", 
+    "https://gpx4u-0460cd678569.herokuapp.com", 
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",  # Additional local development URLs
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+    "*"  # During local development, we'll allow all origins
+]
+
 # Configure CORS
 CORS(app,
-    origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"],
+    origins=ALLOWED_ORIGINS,
     methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Cache-Control"],
     supports_credentials=True,
@@ -52,7 +64,7 @@ CORS(app,
     max_age=3600,
     resources={
         r"/*": {
-            "origins": ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"],
+            "origins": ALLOWED_ORIGINS,
             "methods": ["GET", "POST", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
             "supports_credentials": True,
@@ -110,7 +122,6 @@ def serve_static(filename):
         
         # Get origin for CORS
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         
         # Set CORS headers 
         headers = {
@@ -118,7 +129,7 @@ def serve_static(filename):
             'Vary': 'Origin'
         }
         
-        if origin in allowed_origins:
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             headers['Access-Control-Allow-Origin'] = origin
         else:
             headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
@@ -213,7 +224,6 @@ def serve(path):
         
         # Get origin for CORS
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         
         # Handle static file requests directly
         if path.startswith('static/'):
@@ -325,7 +335,7 @@ def serve(path):
             )
         
         # Set CORS headers
-        if origin in allowed_origins:
+        if origin in ALLOWED_ORIGINS:
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
@@ -386,7 +396,7 @@ def serve(path):
             origin = request.headers.get('Origin', '')
             allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
             
-            if origin in allowed_origins:
+            if origin in ALLOWED_ORIGINS:
                 response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
@@ -915,11 +925,9 @@ def check_auth():
             if user:
                 response = jsonify({
                     'authenticated': True,
-                    'user': {
-                        'id': user['id'],
-                        'username': user['username'],
-                        'email': user['email']
-                    }
+                    'user_id': user['id'],
+                    'username': user['username'],
+                    'email': user['email']
                 })
             else:
                 # Session exists but user not found - clear session
@@ -935,14 +943,15 @@ def check_auth():
             
         # Set explicit CORS headers
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         
-        if origin in allowed_origins:
+        # During local development, allow all origins or check against our list
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
         return response
         
     except Exception as e:
@@ -955,12 +964,13 @@ def check_auth():
         
         # Set CORS headers even on error
         origin = request.headers.get('Origin', '')
-        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             error_response.headers['Access-Control-Allow-Origin'] = origin
         else:
             error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        error_response.headers['Vary'] = 'Origin'
         return error_response, 500
 
 @app.route('/auth/login', methods=['POST', 'OPTIONS'])
@@ -978,50 +988,53 @@ def login():
             error_response = jsonify({'error': 'Missing username or password'})
             # Set CORS headers
             origin = request.headers.get('Origin', '')
-            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
                 error_response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            error_response.headers['Vary'] = 'Origin'
             return error_response, 400
             
         # Check credentials
-        user = db.validate_login(username, password)
-        if user:
+        user_id = db.verify_user(username, password)
+        if user_id:
             print(f"Login successful for user: {username}")
-            session['user_id'] = user['id']
+            session['user_id'] = user_id
             session.permanent = True
             
+            # Get additional user details
+            user = db.get_user_by_id(user_id)
+            
             success_response = jsonify({
-                'success': True,
-                'user': {
-                    'id': user['id'],
-                    'username': user['username'],
-                    'email': user['email']
-                }
+                'message': 'Login successful',
+                'user_id': user_id,
+                'username': username
             })
             
             # Set CORS headers
             origin = request.headers.get('Origin', '')
-            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
                 success_response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             success_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            success_response.headers['Vary'] = 'Origin'
             return success_response
         else:
             print(f"Invalid login credentials for: {username}")
             error_response = jsonify({'error': 'Invalid credentials'})
             # Set CORS headers
             origin = request.headers.get('Origin', '')
-            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
                 error_response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            error_response.headers['Vary'] = 'Origin'
             return error_response, 401
             
     except Exception as e:
@@ -1030,12 +1043,13 @@ def login():
         error_response = jsonify({'error': str(e)})
         # Set CORS headers even on error
         origin = request.headers.get('Origin', '')
-        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             error_response.headers['Access-Control-Allow-Origin'] = origin
         else:
             error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        error_response.headers['Vary'] = 'Origin'
         return error_response, 500
 
 @app.route('/auth/logout', methods=['POST', 'OPTIONS'])
@@ -1050,12 +1064,13 @@ def logout():
         
         # Set CORS headers 
         origin = request.headers.get('Origin', '')
-        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
         return response
     except Exception as e:
         print(f"Logout error: {str(e)}")
@@ -1067,12 +1082,13 @@ def logout():
         
         # Set CORS headers even on error
         origin = request.headers.get('Origin', '')
-        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             error_response.headers['Access-Control-Allow-Origin'] = origin
         else:
             error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        error_response.headers['Vary'] = 'Origin'
         return error_response, 500
 
 @app.route('/auth/register', methods=['POST', 'OPTIONS'])
@@ -1092,12 +1108,13 @@ def register():
             
             # Set CORS headers
             origin = request.headers.get('Origin', '')
-            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
                 error_response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            error_response.headers['Vary'] = 'Origin'
             return error_response, 400
             
         # Check if user already exists
@@ -1108,12 +1125,13 @@ def register():
             
             # Set CORS headers
             origin = request.headers.get('Origin', '')
-            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
                 error_response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            error_response.headers['Vary'] = 'Origin'
             return error_response, 409
             
         # Register the new user
@@ -1133,22 +1151,20 @@ def register():
             )
             
             success_response = jsonify({
-                'success': True,
-                'user': {
-                    'id': user_id,
-                    'username': username,
-                    'email': email
-                }
+                'message': 'Registration successful',
+                'user_id': user_id,
+                'username': username
             })
             
             # Set CORS headers
             origin = request.headers.get('Origin', '')
-            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
                 success_response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             success_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            success_response.headers['Vary'] = 'Origin'
             return success_response
         else:
             print(f"Failed to register user: {username}")
@@ -1156,12 +1172,13 @@ def register():
             
             # Set CORS headers
             origin = request.headers.get('Origin', '')
-            if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
                 error_response.headers['Access-Control-Allow-Origin'] = origin
             else:
                 error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
                 
             error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+            error_response.headers['Vary'] = 'Origin'
             return error_response, 500
             
     except Exception as e:
@@ -1171,12 +1188,13 @@ def register():
         
         # Set CORS headers even on error
         origin = request.headers.get('Origin', '')
-        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             error_response.headers['Access-Control-Allow-Origin'] = origin
         else:
             error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        error_response.headers['Vary'] = 'Origin'
         return error_response, 500
 
 @app.route('/static/js/main.ed081796.js.map')
@@ -1187,7 +1205,6 @@ def serve_main_js_map():
         
         # Set CORS headers
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         
         # Set proper CORS headers
         headers = {
@@ -1196,15 +1213,28 @@ def serve_main_js_map():
             'Vary': 'Origin'
         }
         
-        if origin in allowed_origins:
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             headers['Access-Control-Allow-Origin'] = origin
         else:
             headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         headers['Access-Control-Allow-Credentials'] = 'true'
         
-        # Use the correct Heroku path
-        file_path = '/app/backend/static/js/main.ed081796.js.map'
+        # First check local paths
+        local_paths = [
+            os.path.join('static/js', 'main.39b03b12.js.map'),
+            os.path.join('backend/static/js', 'main.39b03b12.js.map'),
+            os.path.join('build/static/js', 'main.39b03b12.js.map')
+        ]
+        
+        for path in local_paths:
+            if os.path.exists(path):
+                print(f"Found file at local path: {path}")
+                dir_path, file_name = os.path.split(path)
+                return send_from_directory(dir_path, file_name, headers=headers)
+                
+        # Then try Heroku path as fallback
+        file_path = '/app/backend/static/js/main.39b03b12.js.map'
         
         if os.path.exists(file_path):
             print(f"Found file at: {file_path}")
@@ -1332,6 +1362,214 @@ def serve_chunk_js_map():
         return jsonify({"error": "Chunk JS map file not found"}), 404
     except Exception as e:
         print(f"Error serving chunk JS map file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/static/js/main.39b03b12.js')
+def serve_main_js_latest():
+    try:
+        print("\n=== Serving Main JS ===")
+        print(f"Request method: {request.method}")
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        # Set CORS headers for JS file
+        origin = request.headers.get('Origin', '')
+        
+        # Set proper CORS headers
+        headers = {
+            'Content-Type': 'application/javascript',
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
+        }
+        
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            headers['Access-Control-Allow-Origin'] = origin
+            print(f"Using origin from request: {origin}")
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            print("Using default origin: https://gpx4u.com")
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
+        print(f"Final headers: {headers}")
+        
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/js/main.39b03b12.js'
+        print(f"Checking file path: {file_path}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/javascript'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                print(f"Successfully created response")
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
+            
+        # If Heroku path doesn't exist, try local directories
+        local_paths = [
+            os.path.join('static/js', 'main.39b03b12.js'),
+            os.path.join('backend/static/js', 'main.39b03b12.js'),
+            os.path.join('build/static/js', 'main.39b03b12.js')
+        ]
+        
+        for path in local_paths:
+            if os.path.exists(path):
+                print(f"Found file at local path: {path}")
+                dir_path, file_name = os.path.split(path)
+                return send_from_directory(dir_path, file_name, headers=headers)
+                
+        print(f"Main JS file not found in any location")
+        return jsonify({"error": "Main JS file not found"}), 404
+    except Exception as e:
+        print(f"Error serving main JS file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/static/js/main.4908f7be.js')
+def serve_main_js_20250327():
+    try:
+        print("\n=== Serving Main JS ===")
+        print(f"Request method: {request.method}")
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        # Set CORS headers for JS file
+        origin = request.headers.get('Origin', '')
+        
+        # Set proper CORS headers
+        headers = {
+            'Content-Type': 'application/javascript',
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
+        }
+        
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            headers['Access-Control-Allow-Origin'] = origin
+            print(f"Using origin from request: {origin}")
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            print("Using default origin: https://gpx4u.com")
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
+        print(f"Final headers: {headers}")
+        
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/js/main.4908f7be.js'
+        print(f"Checking file path: {file_path}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/javascript'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                print(f"Successfully created response")
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
+            
+        # If Heroku path doesn't exist, try local directories
+        local_paths = [
+            os.path.join('static/js', 'main.4908f7be.js'),
+            os.path.join('backend/static/js', 'main.4908f7be.js'),
+            os.path.join('build/static/js', 'main.4908f7be.js')
+        ]
+        
+        for path in local_paths:
+            if os.path.exists(path):
+                print(f"Found file at local path: {path}")
+                dir_path, file_name = os.path.split(path)
+                return send_from_directory(dir_path, file_name, headers=headers)
+                
+        print(f"Main JS file not found in any location")
+        return jsonify({"error": "Main JS file not found"}), 404
+    except Exception as e:
+        print(f"Error serving main JS file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/static/js/main.4908f7be.js.map')
+def serve_main_js_map_20250327():
+    try:
+        print("\n=== Serving Main JS Map ===")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        # Set CORS headers
+        origin = request.headers.get('Origin', '')
+        
+        # Set proper CORS headers
+        headers = {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
+        }
+        
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        # First check local paths
+        local_paths = [
+            os.path.join('static/js', 'main.4908f7be.js.map'),
+            os.path.join('backend/static/js', 'main.4908f7be.js.map'),
+            os.path.join('build/static/js', 'main.4908f7be.js.map')
+        ]
+        
+        for path in local_paths:
+            if os.path.exists(path):
+                print(f"Found file at local path: {path}")
+                dir_path, file_name = os.path.split(path)
+                return send_from_directory(dir_path, file_name, headers=headers)
+                
+        # Then try Heroku path as fallback
+        file_path = '/app/backend/static/js/main.4908f7be.js.map'
+        
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/json'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
+            
+        print(f"Main JS map file not found: {file_path}")
+        return jsonify({"error": "Main JS map file not found"}), 404
+    except Exception as e:
+        print(f"Error serving main JS map file: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
