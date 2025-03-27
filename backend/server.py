@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session, send_from_directory, make_response
+from flask import Flask, request, jsonify, session, send_from_directory, make_response, send_file
 from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
@@ -779,31 +779,26 @@ def serve_main_css():
             print(f"File not found at: {file_path}")
             return jsonify({"error": "CSS file not found"}), 404
             
-        try:
-            with open(file_path, 'rb') as f:
-                content = f.read()
-                print(f"Successfully read file, size: {len(content)} bytes")
-                
-                response = make_response(content)
-                response.headers['Content-Type'] = 'text/css'
-                response.headers['Cache-Control'] = 'public, max-age=31536000'
-                
-                origin = request.headers.get('Origin', '')
-                print(f"Request origin: {origin}")
-                
-                if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]:
-                    response.headers['Access-Control-Allow-Origin'] = origin
-                else:
-                    response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                    
-                response.headers['Access-Control-Allow-Credentials'] = 'true'
-                print(f"Response headers: {dict(response.headers)}")
-                return response
-                
-        except IOError as e:
-            print(f"Error reading file: {str(e)}")
-            traceback.print_exc()
-            return jsonify({"error": f"Error reading CSS file: {str(e)}"}), 500
+        origin = request.headers.get('Origin', '')
+        print(f"Request origin: {origin}")
+        
+        response = send_file(
+            file_path,
+            mimetype='text/css',
+            as_attachment=False,
+            download_name=None,
+            conditional=True
+        )
+        
+        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        print(f"Response headers: {dict(response.headers)}")
+        return response
             
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
