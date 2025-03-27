@@ -2,6 +2,7 @@
   "name": "running-analysis",
   "version": "1.0.0",
   "private": true,
+  "homepage": "https://gpx4u.com",
   "dependencies": {
     "chart.js": "^4.4.8",
     "leaflet": "^1.9.4",
