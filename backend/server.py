@@ -48,7 +48,7 @@ app.secret_key = secrets.token_hex(32)
 
 # Configure CORS
 CORS(app,
-    origins=["http://localhost:3000", "https://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
+    origins=["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
     supports_credentials=True
@@ -86,18 +86,15 @@ def serve_static(path):
     try:
         # Split the path into components
         path_parts = path.split('/')
-        if len(path_parts) < 2:
-            print(f"Invalid path format: {path}")
-            return f"Invalid path format: {path}", 404
-            
+        print(f"Path parts: {path_parts}")
+        
         # The first part should be 'js' or 'css'
         static_type = path_parts[0]
-        if static_type not in ['js', 'css']:
-            print(f"Invalid static type: {static_type}")
-            return f"Invalid static type: {static_type}", 404
-            
+        print(f"Static type: {static_type}")
+        
         # The rest is the file path
         file_path = '/'.join(path_parts[1:])
+        print(f"File path: {file_path}")
         
         # Determine the correct MIME type based on file extension
         mime_type = None
@@ -112,8 +109,6 @@ def serve_static(path):
         static_dir = os.path.join('/app/build/static', static_type)
         full_path = os.path.join(static_dir, file_path)
         
-        print(f"Static type: {static_type}")
-        print(f"File path: {file_path}")
         print(f"Static directory: {static_dir}")
         print(f"Full path: {full_path}")
         print(f"Directory exists: {os.path.exists(static_dir)}")
@@ -131,6 +126,7 @@ def serve_static(path):
         print(f"Serving file from {static_dir}")
         response = send_from_directory(static_dir, file_path, mimetype=mime_type)
         response.headers['Cache-Control'] = 'public, max-age=31536000'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
     except Exception as e:
         print(f"Error serving static file: {str(e)}")
