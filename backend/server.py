@@ -497,6 +497,7 @@ def analyze():
         print(f"Processed form data: pace_limit={pace_limit}, age={age}, resting_hr={resting_hr}")
         
         # Get user profile for additional metrics
+        db.check_connection()  # Ensure connection is valid
         profile = db.get_profile(session['user_id'])
         print("\nProfile data:", profile)
         
@@ -531,23 +532,60 @@ def analyze():
                 print("Analysis returned no results")
                 return jsonify({'error': 'Failed to analyze run data'}), 500
                 
+            # Calculate totals for database storage
+            total_distance = analysis_result.get('total_distance', 0)
+            avg_pace = analysis_result.get('avg_pace_all', 0)
+            avg_hr = analysis_result.get('avg_hr_all', 0)
+                
             # Build run_data to save in the runs table
             run_data = {
-                'date': run_date,   # or datetime.now().strftime('%Y-%m-%d')
-                'data': analysis_result
+                'date': run_date,
+                'data': analysis_result,
+                'total_distance': total_distance,
+                'avg_pace': avg_pace,
+                'avg_hr': avg_hr,
+                'pace_limit': pace_limit
             }
             
+            # Check database connection before saving
+            db.check_connection()
+            
             # Actually save the run
-            print("\nAttempting to save run data...")
+            print("\nAttempting to save run data to database...")
+            print(f"User ID: {session['user_id']}")
+            print(f"Run date: {run_date}")
+            print(f"Run distance: {total_distance}")
+            
             run_id = db.save_run(session['user_id'], run_data)
-            print(f"Run saved successfully with ID: {run_id}")
+            
+            if run_id:
+                print(f"Run saved successfully with ID: {run_id}")
+            else:
+                print("Run was not saved! save_run returned None.")
+                print("Continuing with analysis but data won't be saved to history.")
 
-            return jsonify({
+            # Return analysis results
+            response = jsonify({
                 'message': 'Analysis complete',
                 'data': analysis_result,
                 'run_id': run_id,
-                'saved': True
+                'saved': run_id is not None,
+                'distance': total_distance,
+                'avg_pace': avg_pace,
+                'avg_hr': avg_hr
             })
+            
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+                response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Vary'] = 'Origin'
+            
+            return response
             
         except Exception as e:
             print(f"\nError during analysis:")
@@ -1648,6 +1686,97 @@ def serve_main_js_map_20250327():
         print(f"Error serving main JS map file: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route('/runs', methods=['GET'])
+@login_required
+def get_runs():
+    try:
+        print("\n=== Getting Run History ===")
+        print(f"User ID: {session['user_id']}")
+        
+        # Make sure we're using the correct database connection
+        try:
+            # Force connection check/reconnect if needed
+            db.check_connection()
+            
+            # Get all runs for the user
+            runs = db.get_all_runs(session['user_id'])
+            print(f"Found {len(runs)} runs in database")
+            
+            # Debug: Print the first run if available
+            if runs and len(runs) > 0:
+                first_run = runs[0]
+                print(f"First run ID: {first_run.get('id')}")
+                print(f"First run date: {first_run.get('date')}")
+            
+            formatted_runs = []
+            for run in runs:
+                try:
+                    # Process each run
+                    run_id = run.get('id')
+                    run_date = run.get('date')
+                    run_distance = run.get('total_distance')
+                    
+                    # For data field, convert from JSON string if needed
+                    run_data = None
+                    if 'data' in run and run['data']:
+                        if isinstance(run['data'], str):
+                            try:
+                                run_data = json.loads(run['data'])
+                            except:
+                                print(f"Failed to parse run data JSON for run ID {run_id}")
+                                run_data = {}
+                        else:
+                            run_data = run['data']
+                    
+                    # Create a formatted representation
+                    formatted_run = {
+                        'id': run_id,
+                        'date': run_date,
+                        'distance': run_distance or 0,
+                        'data': run_data
+                    }
+                    formatted_runs.append(formatted_run)
+                except Exception as run_error:
+                    print(f"Error processing run {run.get('id', 'unknown')}: {str(run_error)}")
+                    traceback.print_exc()
+                    
+            # Return the formatted runs
+            response = jsonify(formatted_runs)
+            
+            # Set CORS headers
+            origin = request.headers.get('Origin', '')
+            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+                response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Vary'] = 'Origin'
+            
+            return response
+            
+        except Exception as db_error:
+            print(f"Database error: {str(db_error)}")
+            traceback.print_exc()
+            raise
+            
+    except Exception as e:
+        print(f"Error getting runs: {str(e)}")
+        traceback.print_exc()
+        error_response = jsonify({'error': str(e)})
+        
+        # Set CORS headers even on error
+        origin = request.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        error_response.headers['Vary'] = 'Origin'
+        
+        return error_response, 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")

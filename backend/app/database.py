@@ -194,42 +194,109 @@ class RunDatabase:
             # Check if we need to reconnect
             self.check_connection()
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
-                # PostgreSQL save
-                self.cursor.execute("""
-                    INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id
-                """, (
-                    user_id,
-                    run_data['date'],
-                    json.dumps(run_data['data']),
-                    run_data['total_distance'],
-                    run_data['avg_pace'],
-                    run_data.get('avg_hr'),
-                    run_data.get('pace_limit')
-                ))
+            # Extract key fields and apply proper type conversions
+            user_id = int(user_id) if user_id else None
+            run_date = str(run_data.get('date', datetime.now().strftime('%Y-%m-%d')))
+            
+            # For numerical fields, ensure they're proper types
+            total_distance = float(run_data.get('total_distance', 0))
+            avg_pace = float(run_data.get('avg_pace', 0))
+            avg_hr = float(run_data.get('avg_hr', 0) or 0)  # Handle None
+            pace_limit = float(run_data.get('pace_limit', 0) or 0)  # Handle None
+            
+            # Ensure JSON data is properly serialized
+            data_json = None
+            if 'data' in run_data:
+                if isinstance(run_data['data'], str):
+                    data_json = run_data['data']  # Already a JSON string
+                else:
+                    # Convert to JSON string
+                    try:
+                        data_json = json.dumps(run_data['data'])
+                    except Exception as json_err:
+                        print(f"Error serializing run data: {str(json_err)}")
+                        data_json = json.dumps({})  # Empty if error
             else:
-                # SQLite save
-                self.cursor.execute("""
-                    INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    user_id,
-                    run_data['date'],
-                    json.dumps(run_data['data']),
-                    run_data['total_distance'],
-                    run_data['avg_pace'],
-                    run_data.get('avg_hr'),
-                    run_data.get('pace_limit')
-                ))
-            self.conn.commit()
-            return self.cursor.lastrowid
+                data_json = json.dumps({})  # Empty if no data
+            
+            print(f"Saving run to database:")
+            print(f"  User ID: {user_id}")
+            print(f"  Date: {run_date}")
+            print(f"  Distance: {total_distance}")
+            print(f"  Avg Pace: {avg_pace}")
+            print(f"  Avg HR: {avg_hr}")
+            
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                # PostgreSQL save - use transaction with explicit commit
+                try:
+                    # Start transaction
+                    self.conn.autocommit = False
+                    
+                    self.cursor.execute("""
+                        INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                    """, (user_id, run_date, data_json, total_distance, avg_pace, avg_hr, pace_limit))
+                    
+                    # Get the ID
+                    result = self.cursor.fetchone()
+                    run_id = result[0] if result else None
+                    
+                    # Commit transaction
+                    self.conn.commit()
+                    self.conn.autocommit = True
+                    
+                    print(f"PostgreSQL save complete, run_id: {run_id}")
+                    return run_id
+                    
+                except Exception as pg_error:
+                    # Roll back on error
+                    print(f"PostgreSQL save error: {str(pg_error)}")
+                    traceback.print_exc()
+                    try:
+                        self.conn.rollback()
+                    except:
+                        pass
+                    return None
+            else:
+                # SQLite save - use transaction with explicit commit
+                try:
+                    # Start transaction
+                    self.cursor.execute("BEGIN TRANSACTION")
+                    
+                    self.cursor.execute("""
+                        INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (user_id, run_date, data_json, total_distance, avg_pace, avg_hr, pace_limit))
+                    
+                    # Get the ID
+                    run_id = self.cursor.lastrowid
+                    
+                    # Commit transaction
+                    self.cursor.execute("COMMIT")
+                    
+                    print(f"SQLite save complete, run_id: {run_id}")
+                    return run_id
+                    
+                except Exception as sqlite_error:
+                    # Roll back on error
+                    print(f"SQLite save error: {str(sqlite_error)}")
+                    traceback.print_exc()
+                    try:
+                        self.cursor.execute("ROLLBACK")
+                    except:
+                        pass
+                    return None
+                
         except Exception as e:
             print(f"Error saving run: {e}")
             traceback.print_exc()
             try:
-                self.conn.rollback()
+                # Additional roll back if outer transaction exists
+                if isinstance(self.conn, psycopg2.extensions.connection):
+                    self.conn.rollback()
+                else:
+                    self.cursor.execute("ROLLBACK")
             except:
                 pass  # Ignore rollback errors
             return None
@@ -239,22 +306,82 @@ class RunDatabase:
             # Check if we need to reconnect
             self.check_connection()
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
-                # PostgreSQL query
-                self.cursor.execute("""
-                    SELECT * FROM runs 
-                    WHERE user_id = %s 
-                    ORDER BY date DESC
-                """, (user_id,))
-            else:
-                # SQLite query
-                self.cursor.execute("""
-                    SELECT * FROM runs 
-                    WHERE user_id = ? 
-                    ORDER BY date DESC
-                """, (user_id,))
-            runs = self.cursor.fetchall()
-            return [dict(run) for run in runs]
+            print(f"Retrieving runs for user ID: {user_id}")
+            
+            # Validate and convert user_id
+            user_id = int(user_id) if user_id else None
+            if not user_id:
+                print("Invalid user ID")
+                return []
+            
+            # Use a try-except block to handle query issues
+            try:
+                if isinstance(self.conn, psycopg2.extensions.connection):
+                    # PostgreSQL query
+                    self.cursor.execute("""
+                        SELECT id, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit
+                        FROM runs 
+                        WHERE user_id = %s 
+                        ORDER BY date DESC
+                    """, (user_id,))
+                else:
+                    # SQLite query
+                    self.cursor.execute("""
+                        SELECT id, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit
+                        FROM runs 
+                        WHERE user_id = ? 
+                        ORDER BY date DESC
+                    """, (user_id,))
+                
+                # Fetch all results
+                runs = self.cursor.fetchall()
+                
+                if not runs:
+                    print("No runs found for this user")
+                    return []
+                
+                print(f"Found {len(runs)} runs")
+                
+                # Convert to list of dictionaries with proper handling
+                result = []
+                for run in runs:
+                    try:
+                        # Start with a basic dictionary conversion 
+                        run_dict = dict(run)
+                        
+                        # Handle data field which should be JSON
+                        if 'data' in run_dict and run_dict['data']:
+                            # If it's a string, try to parse it
+                            if isinstance(run_dict['data'], str):
+                                try:
+                                    run_dict['data'] = json.loads(run_dict['data'])
+                                except json.JSONDecodeError:
+                                    print(f"Failed to parse JSON data for run ID {run_dict.get('id')}")
+                                    run_dict['data'] = {}
+                            # If it's already a dict/object (from psycopg2), use as is
+                                
+                        # Make sure other fields have sensible defaults
+                        for field in ['total_distance', 'avg_pace', 'avg_hr', 'pace_limit']:
+                            if field not in run_dict or run_dict[field] is None:
+                                run_dict[field] = 0
+                        
+                        result.append(run_dict)
+                    except Exception as run_error:
+                        print(f"Error processing run record: {str(run_error)}")
+                        traceback.print_exc()
+                        # Skip this run but continue with others
+                
+                return result
+                
+            except Exception as query_error:
+                print(f"Database query error: {str(query_error)}")
+                traceback.print_exc()
+                try:
+                    self.conn.rollback()
+                except:
+                    pass
+                return []
+            
         except Exception as e:
             print(f"Error getting all runs: {e}")
             traceback.print_exc()
