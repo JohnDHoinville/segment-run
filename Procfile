@@ -1,1 +1,1 @@
-web: echo "Starting file copy process..." && ls -la /app/build/static/js && ls -la /app/build/static/css && mkdir -p /app/build/static/js /app/build/static/css && echo "Copying JS files..." && cp -r build/static/js/* /app/build/static/js/ && echo "Copying CSS files..." && cp -r build/static/css/* /app/build/static/css/ && echo "Verifying copied files..." && ls -la /app/build/static/js && ls -la /app/build/static/css && cd backend && PYTHONPATH=/app/backend gunicorn server:app
+web: cd backend && PYTHONPATH=/app/backend gunicorn server:app
