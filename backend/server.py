@@ -16,6 +16,8 @@ from app import app
 import psycopg2
 import sys
 from werkzeug.security import generate_password_hash
+import flask
+import werkzeug
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -511,8 +513,8 @@ def analyze():
         
         # Try to get the profile with a direct connection check
         try:
-        profile = db.get_profile(session['user_id'])
-        print("\nProfile data:", profile)
+            profile = db.get_profile(session['user_id'])
+            print("\nProfile data:", profile)
         except Exception as profile_error:
             print(f"Error getting profile: {str(profile_error)}")
             # Create default profile if fetch fails
@@ -2330,6 +2332,30 @@ def create_admin():
         traceback.print_exc()
         return jsonify({
             'error': f'Unexpected error: {str(e)}'
+        }), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """
+    Simple health check endpoint that doesn't rely on database connection.
+    This helps diagnose if the server is running at all.
+    """
+    try:
+        return jsonify({
+            'status': 'ok',
+            'message': 'Server is running',
+            'timestamp': datetime.now().isoformat(),
+            'python_version': sys.version,
+            'flask_version': flask.__version__,
+            'werkzeug_version': werkzeug.__version__
+        })
+    except Exception as e:
+        # Catch and log any errors
+        print(f"Health check error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
         }), 500
 
 if __name__ == '__main__':
