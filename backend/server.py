@@ -103,18 +103,31 @@ def serve_static(path):
         elif path.endswith('.map'):
             mime_type = 'application/json'
             
-        static_dir = '/app/build/static'
-        full_path = os.path.join(static_dir, path)
-        
+        # Split the path into components
+        path_parts = path.split('/')
+        if len(path_parts) > 1:
+            # If path is like 'js/main.4f93416e.js' or 'css/main.42f26821.css'
+            # We want to serve from /app/build/static/js or /app/build/static/css
+            static_dir = os.path.join('/app/build/static', path_parts[0])
+            file_path = '/'.join(path_parts[1:])
+        else:
+            # If path is just a filename, look in both js and css directories
+            static_dir = '/app/build/static'
+            file_path = path
+            
         print(f"Static directory: {static_dir}")
-        print(f"Full path to file: {full_path}")
+        print(f"File path: {file_path}")
         print(f"Directory exists: {os.path.exists(static_dir)}")
+        
+        # Try to find the file in the appropriate directory
+        full_path = os.path.join(static_dir, file_path)
+        print(f"Full path to file: {full_path}")
         print(f"File exists: {os.path.exists(full_path)}")
         print(f"MIME type: {mime_type}")
         
         if os.path.exists(full_path):
             print(f"Serving file from {static_dir}")
-            response = send_from_directory(static_dir, path, mimetype=mime_type)
+            response = send_from_directory(static_dir, file_path, mimetype=mime_type)
             # Add cache control headers
             response.headers['Cache-Control'] = 'public, max-age=31536000'
             return response
