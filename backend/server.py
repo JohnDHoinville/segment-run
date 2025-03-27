@@ -770,35 +770,53 @@ def serve_main_js():
 def serve_main_css():
     try:
         print("\n=== Serving Main CSS ===")
-        file_path = '/app/backend/static/css/main.42f26821.css'
-        print(f"File path: {file_path}")
-        print(f"File exists: {os.path.exists(file_path)}")
-        print(f"Current working directory: {os.getcwd()}")
+        app_root = os.path.dirname(os.path.abspath(__file__))
+        css_dir = os.path.join(app_root, 'static', 'css')
+        filename = 'main.42f26821.css'
         
-        if not os.path.exists(file_path):
-            print(f"File not found at: {file_path}")
-            return jsonify({"error": "CSS file not found"}), 404
-            
+        print(f"App root: {app_root}")
+        print(f"CSS directory: {css_dir}")
+        print(f"Filename: {filename}")
+        print(f"Full path: {os.path.join(css_dir, filename)}")
+        print(f"File exists: {os.path.exists(os.path.join(css_dir, filename))}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Directory contents: {os.listdir(css_dir)}")
+        
         origin = request.headers.get('Origin', '')
         print(f"Request origin: {origin}")
         
-        response = send_file(
-            file_path,
-            mimetype='text/css',
-            as_attachment=False,
-            download_name=None,
-            conditional=True
-        )
+        headers = {
+            'Cache-Control': 'public, max-age=31536000',
+            'Access-Control-Allow-Credentials': 'true'
+        }
         
         if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]:
-            response.headers['Access-Control-Allow-Origin'] = origin
+            headers['Access-Control-Allow-Origin'] = origin
         else:
-            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Cache-Control'] = 'public, max-age=31536000'
-        print(f"Response headers: {dict(response.headers)}")
-        return response
+        print(f"Headers before send_from_directory: {headers}")
+        
+        try:
+            response = send_from_directory(
+                directory=css_dir,
+                path=filename,
+                mimetype='text/css',
+                as_attachment=False,
+                download_name=None,
+                conditional=True
+            )
+            
+            for key, value in headers.items():
+                response.headers[key] = value
+                
+            print(f"Response headers: {dict(response.headers)}")
+            return response
+            
+        except Exception as e:
+            print(f"Error in send_from_directory: {str(e)}")
+            traceback.print_exc()
+            return jsonify({"error": f"Error serving CSS file: {str(e)}"}), 500
             
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
