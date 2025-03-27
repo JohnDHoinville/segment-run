@@ -344,6 +344,18 @@ class RunDatabase:
 
     def save_profile(self, user_id, age, resting_hr, weight=70, gender=1):
         try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
+            # Ensure all values are properly typed
+            user_id = int(user_id) if user_id else None
+            age = int(age) if age else 30
+            resting_hr = int(resting_hr) if resting_hr else 60
+            weight = float(weight) if weight else 70.0
+            gender = int(gender) if gender is not None else 0
+            
+            print(f"Saving profile: user_id={user_id}, age={age}, resting_hr={resting_hr}, weight={weight}, gender={gender}")
+            
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL save/update
                 self.cursor.execute("""
@@ -360,13 +372,21 @@ class RunDatabase:
                     VALUES (?, ?, ?, ?, ?)
                 """, (user_id, age, resting_hr, weight, gender))
             self.conn.commit()
+            return True
         except Exception as e:
             print(f"Error saving profile: {e}")
-            self.conn.rollback()
-            raise
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            return False
 
     def get_profile(self, user_id):
         try:
+            # Check if we need to reconnect
+            self.check_connection()
+            
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
@@ -379,12 +399,48 @@ class RunDatabase:
                     SELECT * FROM profiles 
                     WHERE user_id = ?
                 """, (user_id,))
+            
             profile = self.cursor.fetchone()
-            return dict(profile) if profile else None
+            
+            if profile:
+                return dict(profile)
+            
+            # If no profile exists, create a default one
+            print(f"No profile found for user {user_id}, creating default")
+            default_profile = {
+                'user_id': user_id,
+                'age': 30,
+                'resting_hr': 60,
+                'weight': 70,
+                'gender': 0
+            }
+            
+            # Save the default profile
+            self.save_profile(
+                user_id=user_id,
+                age=default_profile['age'],
+                resting_hr=default_profile['resting_hr'],
+                weight=default_profile['weight'],
+                gender=default_profile['gender']
+            )
+            
+            return default_profile
         except Exception as e:
             print(f"Error getting profile: {e}")
-            self.conn.rollback()
-            raise
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass  # Ignore rollback errors
+            
+            # Return a default profile even on error
+            return {
+                'user_id': user_id,
+                'age': 30,
+                'resting_hr': 60, 
+                'weight': 70,
+                'gender': 0
+            }
 
     def create_user(self, username, password):
         try:

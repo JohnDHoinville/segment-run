@@ -473,9 +473,28 @@ def analyze():
         print("\nSession data:", dict(session))
         print("User ID:", session.get('user_id'))
         
-        pace_limit = float(request.form.get('paceLimit', 0))
-        age = int(request.form.get('age', 0))
-        resting_hr = int(request.form.get('restingHR', 0))
+        # Get form data with proper default values to avoid conversion errors
+        pace_limit_str = request.form.get('paceLimit', '0')
+        age_str = request.form.get('age', '0')
+        resting_hr_str = request.form.get('restingHR', '0')
+        
+        # Convert to proper types with error handling
+        try:
+            pace_limit = float(pace_limit_str) if pace_limit_str.strip() else 0
+        except ValueError:
+            pace_limit = 0
+            
+        try:
+            age = int(age_str) if age_str.strip() else 0
+        except ValueError:
+            age = 0
+            
+        try:
+            resting_hr = int(resting_hr_str) if resting_hr_str.strip() else 0
+        except ValueError:
+            resting_hr = 0
+            
+        print(f"Processed form data: pace_limit={pace_limit}, age={age}, resting_hr={resting_hr}")
         
         # Get user profile for additional metrics
         profile = db.get_profile(session['user_id'])
@@ -628,12 +647,56 @@ def delete_run(run_id):
 @login_required
 def get_profile():
     try:
+        print(f"Getting profile for user ID: {session['user_id']}")
         profile = db.get_profile(session['user_id'])
-        return jsonify(profile)
+        
+        # If profile is None, create a default profile
+        if profile is None:
+            print(f"No profile found for user {session['user_id']}, creating default")
+            db.save_profile(
+                user_id=session['user_id'],
+                age=30,  # Default values
+                resting_hr=60,
+                weight=70,
+                gender=0
+            )
+            profile = {
+                'user_id': session['user_id'],
+                'age': 30,
+                'resting_hr': 60,
+                'weight': 70,
+                'gender': 0
+            }
+        
+        response = jsonify(profile)
+        
+        # Set CORS headers for profile response
+        origin = request.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
+        
+        return response
     except Exception as e:
         print(f"Error getting profile: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        error_response = jsonify({'error': str(e)})
+        
+        # Set CORS headers even on error
+        origin = request.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        error_response.headers['Vary'] = 'Origin'
+        
+        return error_response, 500
 
 @app.route('/profile', methods=['POST'])
 @login_required
@@ -915,6 +978,7 @@ def serve_chunk_js():
 @app.route('/auth/check', methods=['GET', 'OPTIONS'])
 def check_auth():
     print("\n=== Auth Check ===")
+    print(f"Request headers: {dict(request.headers)}")
     print(f"Session: {dict(session)}")
     
     try:
@@ -927,31 +991,40 @@ def check_auth():
                     'authenticated': True,
                     'user_id': user['id'],
                     'username': user['username'],
-                    'email': user['email']
+                    'email': user.get('email', '')
                 })
             else:
                 # Session exists but user not found - clear session
                 session.clear()
                 response = jsonify({
-                    'authenticated': False
+                    'authenticated': False,
+                    'user_id': None
                 })
         else:
             # If we get here, user is not authenticated
             response = jsonify({
-                'authenticated': False
+                'authenticated': False,
+                'user_id': None
             })
             
         # Set explicit CORS headers
         origin = request.headers.get('Origin', '')
+        print(f"Origin header: {origin}")
         
-        # During local development, allow all origins or check against our list
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+        # Special handling for production URLs
+        if origin and 'herokuapp.com' in origin:
+            print(f"Setting Access-Control-Allow-Origin to match herokuapp origin: {origin}")
+            response.headers['Access-Control-Allow-Origin'] = origin
+        elif origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            print(f"Setting Access-Control-Allow-Origin from allowed origins: {origin}")
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
+            print(f"Using default Access-Control-Allow-Origin: https://gpx4u.com")
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
             
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Vary'] = 'Origin'
+        print(f"Response headers: {dict(response.headers)}")
         return response
         
     except Exception as e:
@@ -959,12 +1032,15 @@ def check_auth():
         traceback.print_exc()
         error_response = jsonify({
             'authenticated': False,
-            'error': str(e)
+            'error': str(e),
+            'user_id': None
         })
         
         # Set CORS headers even on error
         origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+        if origin and 'herokuapp.com' in origin:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        elif origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             error_response.headers['Access-Control-Allow-Origin'] = origin
         else:
             error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
