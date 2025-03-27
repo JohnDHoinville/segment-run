@@ -709,11 +709,14 @@ def handle_react_static_files():
 def serve_main_js():
     try:
         js_file = 'main.4f93416e.js'
+        print(f"\n=== Serving Main JS ===")
         print(f"Direct serving {js_file}")
+        print(f"Current working directory: {os.getcwd()}")
         
         # Set CORS headers for JS file
         origin = request.headers.get('Origin', '')
         allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        print(f"Request origin: {origin}")
         
         # Set proper CORS headers
         headers = {
@@ -724,16 +727,37 @@ def serve_main_js():
         
         if origin in allowed_origins:
             headers['Access-Control-Allow-Origin'] = origin
+            print(f"Using origin from request: {origin}")
         else:
             headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            print("Using default origin: https://gpx4u.com")
             
         headers['Access-Control-Allow-Credentials'] = 'true'
+        print(f"Final headers: {headers}")
         
         # Use the correct Heroku path
         file_path = '/app/backend/static/js/main.4f93416e.js'
+        print(f"Checking file path: {file_path}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        
         if os.path.exists(file_path):
             print(f"Found file at: {file_path}")
-            return send_from_directory('/app/backend/static/js', js_file, headers=headers)
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/javascript'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                print(f"Successfully created response")
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
             
         print(f"Main JS file not found: {js_file}")
         return jsonify({"error": "Main JS file not found"}), 404
@@ -745,12 +769,13 @@ def serve_main_js():
 @app.route('/static/css/main.42f26821.css')
 def serve_main_css():
     try:
-        css_file = 'main.42f26821.css'
-        print(f"Direct serving {css_file}")
+        print(f"\n=== Serving Main CSS ===")
+        print(f"Current working directory: {os.getcwd()}")
         
         # Set CORS headers for CSS file
         origin = request.headers.get('Origin', '')
         allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        print(f"Request origin: {origin}")
         
         # Set proper CORS headers
         headers = {
@@ -761,18 +786,39 @@ def serve_main_css():
         
         if origin in allowed_origins:
             headers['Access-Control-Allow-Origin'] = origin
+            print(f"Using origin from request: {origin}")
         else:
             headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            print("Using default origin: https://gpx4u.com")
             
         headers['Access-Control-Allow-Credentials'] = 'true'
+        print(f"Final headers: {headers}")
         
         # Use the correct Heroku path
         file_path = '/app/backend/static/css/main.42f26821.css'
+        print(f"Checking file path: {file_path}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        
         if os.path.exists(file_path):
             print(f"Found file at: {file_path}")
-            return send_from_directory('/app/backend/static/css', css_file, headers=headers)
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='text/css'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                print(f"Successfully created response")
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
             
-        print(f"Main CSS file not found: {css_file}")
+        print(f"Main CSS file not found: {file_path}")
         return jsonify({"error": "Main CSS file not found"}), 404
     except Exception as e:
         print(f"Error serving main CSS file: {str(e)}")
