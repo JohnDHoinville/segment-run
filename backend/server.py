@@ -48,7 +48,7 @@ app.secret_key = secrets.token_hex(32)
 
 # Configure CORS
 CORS(app,
-    origins=["http://localhost:3000"],
+    origins=["http://localhost:3000", "https://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
     supports_credentials=True
