@@ -57,9 +57,14 @@ CORS(app,
 # Add debug logging for session
 @app.before_request
 def log_request_info():
-    print('Headers:', dict(request.headers))
-    print('Session:', dict(session))
-    print('Cookies:', dict(request.cookies))
+    print('\n=== Request Details ===')
+    print(f'URL: {request.url}')
+    print(f'Method: {request.method}')
+    print(f'Path: {request.path}')
+    print(f'Headers: {dict(request.headers)}')
+    print(f'Session: {dict(session)}')
+    print(f'Cookies: {dict(request.cookies)}')
+    print('=====================\n')
 
 db = RunDatabase()
 
@@ -74,52 +79,48 @@ def login_required(f):
 # Serve static files
 @app.route('/static/<path:path>')
 def serve_static(path):
-    print(f"\nServing static file: {path}")
+    print(f"\n=== Static File Request ===")
+    print(f"Requested path: {path}")
     print(f"Current working directory: {os.getcwd()}")
+    print(f"Static directory: /app/build/static")
+    print(f"Full path to file: {os.path.join('/app/build/static', path)}")
+    print(f"Directory exists: {os.path.exists('/app/build/static')}")
+    print(f"File exists: {os.path.exists(os.path.join('/app/build/static', path))}")
+    print("========================\n")
+    
     try:
-        # Check if the file exists in the static directory
-        static_path = os.path.join('/app/build/static', path)
-        print(f"Looking for file at: {static_path}")
-        print(f"File exists: {os.path.exists(static_path)}")
-        if os.path.exists(static_path):
-            print(f"Serving file from {static_path}")
-            # Set the correct MIME type based on file extension
-            if path.endswith('.css'):
-                return send_from_directory('/app/build/static', path, mimetype='text/css')
-            elif path.endswith('.js'):
-                return send_from_directory('/app/build/static', path, mimetype='application/javascript')
-            else:
-                return send_from_directory('/app/build/static', path)
+        if os.path.exists(os.path.join('/app/build/static', path)):
+            print(f"Serving file from /app/build/static")
+            return send_from_directory('/app/build/static', path)
         else:
-            print(f"File not found: {static_path}")
+            print(f"File not found: {os.path.join('/app/build/static', path)}")
             return f"File not found: {path}", 404
     except Exception as e:
         print(f"Error serving static file: {str(e)}")
+        traceback.print_exc()
         return str(e), 500
 
 # Serve React App
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    print(f"\nServing path: {path}")
+    print(f"\n=== React App Request ===")
+    print(f"Requested path: {path}")
     print(f"Current working directory: {os.getcwd()}")
+    print(f"Build directory: /app/build")
+    print(f"Full path to file: {os.path.join('/app/build', path)}")
+    print(f"Directory exists: {os.path.exists('/app/build')}")
+    print(f"File exists: {os.path.exists(os.path.join('/app/build', path))}")
+    print("========================\n")
     
     try:
         # First check if it's a static file request
         if path.startswith('static/'):
             static_path = path[7:]  # Remove 'static/' prefix
-            print(f"Serving static file: {static_path}")
-            # Set the correct MIME type based on file extension
-            if static_path.endswith('.css'):
-                return send_from_directory('/app/build/static', static_path, mimetype='text/css')
-            elif static_path.endswith('.js'):
-                return send_from_directory('/app/build/static', static_path, mimetype='application/javascript')
-            else:
-                return send_from_directory('/app/build/static', static_path)
+            return serve_static(static_path)
         
         # Then check if it's a direct file request
-        file_path = os.path.join('/app/build', path)
-        if path and os.path.exists(file_path) and os.path.isfile(file_path):
+        if path and os.path.exists(os.path.join('/app/build', path)) and os.path.isfile(os.path.join('/app/build', path)):
             print(f"Serving file: {path}")
             return send_from_directory('/app/build', path)
         
@@ -128,6 +129,7 @@ def serve(path):
         return send_from_directory('/app/build', 'index.html')
     except Exception as e:
         print(f"Error serving file: {str(e)}")
+        traceback.print_exc()
         return str(e), 500
 
 @app.route('/test', methods=['GET'])
