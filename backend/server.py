@@ -90,10 +90,28 @@ def login_required(f):
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     try:
-        return send_from_directory('static', filename)
+        print(f"\n=== Static File Request ===")
+        print(f"Requested file: {filename}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Static directory exists: {os.path.exists('static')}")
+        if os.path.exists('static'):
+            print(f"Static directory contents: {os.listdir('static')}")
+        print(f"Backend/static exists: {os.path.exists('backend/static')}")
+        if os.path.exists('backend/static'):
+            print(f"Backend/static contents: {os.listdir('backend/static')}")
+        
+        # Try both locations
+        if os.path.exists(os.path.join('static', filename)):
+            return send_from_directory('static', filename)
+        elif os.path.exists(os.path.join('backend/static', filename)):
+            return send_from_directory('backend/static', filename)
+        else:
+            print(f"File not found in either location: {filename}")
+            return jsonify({"error": "File not found"}), 404
     except Exception as e:
         print(f"Error serving static file {filename}: {str(e)}")
-        return jsonify({"error": "File not found"}), 404
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 # Serve React App
 @app.route('/', defaults={'path': ''})
