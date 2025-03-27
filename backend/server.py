@@ -44,14 +44,14 @@ app.secret_key = secrets.token_hex(32)
 
 # Configure CORS
 CORS(app,
-    origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "*"],  # "http://localhost:3000",
+    origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "*"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Cache-Control"],
     supports_credentials=True,
     expose_headers=["Content-Type", "Authorization", "Cache-Control"],
     resources={
         r"/*": {
-            "origins": ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "*"],
+            "origins": ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "*"],
             "methods": ["GET", "POST", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
             "supports_credentials": True,
