@@ -44,14 +44,14 @@ app.secret_key = secrets.token_hex(32)
 
 # Configure CORS
 CORS(app,
-    origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
+    origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"],
     methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Cache-Control"],
     supports_credentials=True,
     expose_headers=["Content-Type", "Authorization", "Cache-Control"],
     resources={
         r"/*": {
-            "origins": ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
+            "origins": ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"],
             "methods": ["GET", "POST", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
             "supports_credentials": True,
@@ -92,7 +92,7 @@ def serve_static(filename):
         
         # Get origin for CORS
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         
         # Set CORS headers 
         headers = {
@@ -195,7 +195,7 @@ def serve(path):
         
         # Get origin for CORS
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         
         # Handle static file requests directly
         if path.startswith('static/'):
@@ -715,7 +715,7 @@ def serve_main_js():
         
         # Set CORS headers for JS file
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         print(f"Request origin: {origin}")
         
         # Set proper CORS headers
@@ -790,7 +790,7 @@ def serve_main_css():
             'Access-Control-Allow-Credentials': 'true'
         }
         
-        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]:
+        if origin in ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]:
             headers['Access-Control-Allow-Origin'] = origin
         else:
             headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
@@ -831,7 +831,7 @@ def serve_chunk_js():
         
         # Set CORS headers for JS file
         origin = request.headers.get('Origin', '')
-        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
         
         # Set proper CORS headers
         headers = {
@@ -859,6 +859,150 @@ def serve_chunk_js():
         print(f"Error serving chunk JS file: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route('/auth/check', methods=['GET'])
+def check_auth():
+    print("\n=== Auth Check ===")
+    print(f"Session: {dict(session)}")
+    
+    try:
+        if 'user_id' in session:
+            user_id = session['user_id']
+            # Get user info to return
+            user = db.get_user_by_id(user_id)
+            if user:
+                return jsonify({
+                    'authenticated': True,
+                    'user': {
+                        'id': user['id'],
+                        'username': user['username'],
+                        'email': user['email']
+                    }
+                })
+            else:
+                # Session exists but user not found - clear session
+                session.clear()
+                
+        # If we get here, user is not authenticated
+        return jsonify({
+            'authenticated': False
+        })
+    except Exception as e:
+        print(f"Auth check error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'authenticated': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/auth/login', methods=['POST'])
+def login():
+    print("\n=== Login Attempt ===")
+    try:
+        data = request.json
+        print(f"Login attempt for: {data.get('username', 'unknown')}")
+        
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            print("Missing username or password")
+            return jsonify({'error': 'Missing username or password'}), 400
+            
+        # Check credentials
+        user = db.validate_login(username, password)
+        if user:
+            print(f"Login successful for user: {username}")
+            session['user_id'] = user['id']
+            session.permanent = True
+            
+            return jsonify({
+                'success': True,
+                'user': {
+                    'id': user['id'],
+                    'username': user['username'],
+                    'email': user['email']
+                }
+            })
+        else:
+            print(f"Invalid login credentials for: {username}")
+            return jsonify({'error': 'Invalid credentials'}), 401
+            
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/auth/logout', methods=['POST'])
+def logout():
+    print("\n=== Logout ===")
+    try:
+        session.clear()
+        return jsonify({
+            'success': True,
+            'message': 'Logged out successfully'
+        })
+    except Exception as e:
+        print(f"Logout error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/auth/register', methods=['POST'])
+def register():
+    print("\n=== Register User ===")
+    try:
+        data = request.json
+        print(f"Registration attempt for: {data.get('username', 'unknown')}")
+        
+        username = data.get('username')
+        password = data.get('password')
+        email = data.get('email')
+        
+        if not username or not password or not email:
+            print("Missing required registration fields")
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Check if user already exists
+        existing_user = db.get_user_by_username(username)
+        if existing_user:
+            print(f"Username already exists: {username}")
+            return jsonify({'error': 'Username already exists'}), 409
+            
+        # Register the new user
+        user_id = db.register_user(username, password, email)
+        if user_id:
+            print(f"Registration successful for user: {username}")
+            session['user_id'] = user_id
+            session.permanent = True
+            
+            # Create default profile for the user
+            db.save_profile(
+                user_id=user_id,
+                age=30,  # Default values
+                resting_hr=60,
+                weight=70,
+                gender=0
+            )
+            
+            return jsonify({
+                'success': True,
+                'user': {
+                    'id': user_id,
+                    'username': username,
+                    'email': email
+                }
+            })
+        else:
+            print(f"Failed to register user: {username}")
+            return jsonify({'error': 'Registration failed'}), 500
+            
+    except Exception as e:
+        print(f"Registration error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
