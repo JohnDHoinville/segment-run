@@ -1,0 +1,21 @@
+{
+  "name": "GPX4U",
+  "description": "Running analysis application",
+  "repository": "https://github.com/JohnDHoinville/segment-run",
+  "keywords": ["python", "flask", "react"],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "FLASK_APP": {
+      "description": "Flask application path",
+      "value": "backend/wsgi.py"
+    },
+    "FLASK_ENV": {
+      "description": "Flask environment",
+      "value": "production"
+    }
+  }
+} 
