@@ -13,6 +13,8 @@ import secrets
 import traceback
 from json import JSONEncoder
 from app import app
+import psycopg2
+import sys
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -458,6 +460,9 @@ def test():
 def analyze():
     try:
         print("\n=== Starting Analysis ===")
+        print(f"SERVER RUNNING FROM: {os.getcwd()}")
+        print(f"SESSION: {dict(session)}")
+        
         if 'file' not in request.files:
             print("No file in request")
             return jsonify({'error': 'No file uploaded'}), 400
@@ -548,7 +553,16 @@ def analyze():
             }
             
             # Check database connection before saving
+            print("\n=== DATABASE INFO ===")
+            print(f"DATABASE_URL env var exists: {'DATABASE_URL' in os.environ}")
+            print(f"Is using PostgreSQL: {isinstance(db.conn, psycopg2.extensions.connection) if 'psycopg2' in sys.modules else 'psycopg2 not imported'}")
+            print(f"Database type: {type(db.conn).__name__}")
+            
+            # Force a database reconnection
+            db.conn = None
+            db.cursor = None
             db.check_connection()
+            print("Database connection reset to ensure a fresh connection")
             
             # Actually save the run
             print("\nAttempting to save run data to database...")
@@ -556,20 +570,83 @@ def analyze():
             print(f"Run date: {run_date}")
             print(f"Run distance: {total_distance}")
             
-            run_id = db.save_run(session['user_id'], run_data)
+            user_id = session.get('user_id')
+            if not user_id:
+                print("ERROR: No user_id in session!")
+                return jsonify({'error': 'User not authenticated'}), 401
+                
+            # Add direct database test
+            try:
+                print("\n=== DIRECT DATABASE TEST ===")
+                if isinstance(db.conn, psycopg2.extensions.connection):
+                    # PostgreSQL test
+                    db.cursor.execute("SELECT current_database(), current_user")
+                    test_result = db.cursor.fetchone()
+                    print(f"PostgreSQL database: {test_result[0]}, user: {test_result[1]}")
+                    
+                    # Test tables
+                    db.cursor.execute("SELECT COUNT(*) FROM runs")
+                    count = db.cursor.fetchone()[0]
+                    print(f"Total runs in database: {count}")
+                    
+                    # Test user's runs
+                    db.cursor.execute("SELECT COUNT(*) FROM runs WHERE user_id = %s", (user_id,))
+                    user_count = db.cursor.fetchone()[0]
+                    print(f"Runs for user {user_id}: {user_count}")
+                else:
+                    # SQLite test
+                    db.cursor.execute("SELECT COUNT(*) FROM runs")
+                    count = db.cursor.fetchone()[0]
+                    print(f"Total runs in database: {count}")
+                    
+                    # Test user's runs
+                    db.cursor.execute("SELECT COUNT(*) FROM runs WHERE user_id = ?", (user_id,))
+                    user_count = db.cursor.fetchone()[0]
+                    print(f"Runs for user {user_id}: {user_count}")
+            except Exception as db_test_error:
+                print(f"Database test error: {str(db_test_error)}")
+                print(traceback.format_exc())
+            
+            # Save the run
+            run_id = db.save_run(user_id, run_data)
             
             if run_id:
                 print(f"Run saved successfully with ID: {run_id}")
+                was_saved = True
             else:
                 print("Run was not saved! save_run returned None.")
-                print("Continuing with analysis but data won't be saved to history.")
+                print("Attempting one more time with simplified data...")
+                
+                # Try one more time with simplified data
+                simplified_data = {
+                    'date': run_date,
+                    'data': {
+                        'total_distance': total_distance,
+                        'avg_pace': avg_pace,
+                        'avg_hr': avg_hr,
+                        'simplified': True
+                    },
+                    'total_distance': total_distance,
+                    'avg_pace': avg_pace,
+                    'avg_hr': avg_hr,
+                    'pace_limit': pace_limit
+                }
+                
+                # Last attempt to save
+                run_id = db.save_run(user_id, simplified_data)
+                was_saved = run_id is not None and run_id > 0
+                
+                if was_saved:
+                    print(f"Simplified run data saved with ID: {run_id}")
+                else:
+                    print("Failed to save even simplified data. Continuing with analysis only.")
 
             # Return analysis results
             response = jsonify({
                 'message': 'Analysis complete',
                 'data': analysis_result,
-                'run_id': run_id,
-                'saved': run_id is not None,
+                'run_id': run_id if run_id else 0,
+                'saved': was_saved,
                 'distance': total_distance,
                 'avg_pace': avg_pace,
                 'avg_hr': avg_hr
@@ -584,6 +661,17 @@ def analyze():
                 
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Vary'] = 'Origin'
+            
+            # Try to verify save was successful
+            try:
+                if run_id:
+                    test_run = db.get_run_by_id(run_id)
+                    if test_run:
+                        print(f"Verified run was saved correctly with ID: {run_id}")
+                    else:
+                        print(f"WARNING: Could not verify run with ID {run_id}")
+            except Exception as verify_error:
+                print(f"Error verifying run: {str(verify_error)}")
             
             return response
             
@@ -1777,6 +1865,138 @@ def get_runs():
         error_response.headers['Vary'] = 'Origin'
         
         return error_response, 500
+
+@app.route('/db-test', methods=['GET'])
+def test_database():
+    try:
+        print("\n=== Testing Database Connection ===")
+        
+        # Get basic system info
+        current_dir = os.getcwd()
+        
+        # Force database reconnection
+        db.conn = None
+        db.cursor = None
+        db.check_connection()
+        
+        # Check database type
+        is_postgres = isinstance(db.conn, psycopg2.extensions.connection)
+        db_type = "PostgreSQL" if is_postgres else "SQLite"
+        
+        # Test tables
+        tables_info = {}
+        if is_postgres:
+            # PostgreSQL tests
+            db.cursor.execute("SELECT current_database(), current_user")
+            db_info = db.cursor.fetchone()
+            db_name = db_info[0]
+            db_user = db_info[1]
+            
+            # Get table info
+            db.cursor.execute("""
+                SELECT table_name, 
+                       (SELECT count(*) FROM information_schema.columns WHERE table_name=t.table_name) AS column_count
+                FROM information_schema.tables t
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            """)
+            tables = db.cursor.fetchall()
+            for table in tables:
+                table_name = table[0]
+                # Get row count
+                db.cursor.execute(f"SELECT COUNT(*) FROM \"{table_name}\"")
+                row_count = db.cursor.fetchone()[0]
+                tables_info[table_name] = {
+                    "column_count": table[1],
+                    "row_count": row_count
+                }
+        else:
+            # SQLite tests
+            db.cursor.execute("SELECT sqlite_version()")
+            db_info = db.cursor.fetchone()
+            db_name = db.db_name  # Fixed: using db.db_name instead of self.db_name
+            db_user = "sqlite"
+            
+            # Get table info
+            db.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [table[0] for table in db.cursor.fetchall()]
+            for table_name in tables:
+                # Get column count
+                db.cursor.execute(f"PRAGMA table_info({table_name})")
+                column_count = len(db.cursor.fetchall())
+                # Get row count
+                db.cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                row_count = db.cursor.fetchone()[0]
+                tables_info[table_name] = {
+                    "column_count": column_count,
+                    "row_count": row_count
+                }
+                
+        # Get Environment info
+        environment_info = {
+            "DATABASE_URL": "exists" if os.environ.get("DATABASE_URL") else "not found",
+            "FLASK_ENV": os.environ.get("FLASK_ENV", "not set"),
+            "DYNO": os.environ.get("DYNO", "not set"),
+            "CURRENT_DIRECTORY": current_dir
+        }
+        
+        # Try to create a test record and read it back
+        test_data = {
+            "test_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "test_value": "Database connectivity test"
+        }
+        if is_postgres:
+            db.cursor.execute(
+                "CREATE TABLE IF NOT EXISTS db_tests (id SERIAL PRIMARY KEY, test_time TIMESTAMP, test_data JSONB)",
+            )
+            db.cursor.execute(
+                "INSERT INTO db_tests (test_time, test_data) VALUES (%s, %s) RETURNING id",
+                (datetime.now(), json.dumps(test_data))
+            )
+            test_id = db.cursor.fetchone()[0]
+            db.conn.commit()
+            
+            db.cursor.execute("SELECT * FROM db_tests WHERE id = %s", (test_id,))
+            test_result = db.cursor.fetchone()
+            test_retrieved = bool(test_result)
+        else:
+            db.cursor.execute(
+                "CREATE TABLE IF NOT EXISTS db_tests (id INTEGER PRIMARY KEY, test_time TEXT, test_data TEXT)"
+            )
+            db.cursor.execute(
+                "INSERT INTO db_tests (test_time, test_data) VALUES (?, ?)",
+                (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), json.dumps(test_data))
+            )
+            test_id = db.cursor.lastrowid
+            db.conn.commit()
+            
+            db.cursor.execute("SELECT * FROM db_tests WHERE id = ?", (test_id,))
+            test_result = db.cursor.fetchone()
+            test_retrieved = bool(test_result)
+            
+        return jsonify({
+            'status': 'Database connection test successful',
+            'database_type': db_type,
+            'database_name': db_name,
+            'database_user': db_user,
+            'tables': tables_info,
+            'environment': environment_info,
+            'test_write_successful': test_id is not None,
+            'test_read_successful': test_retrieved,
+            'connection_thread_id': db.conn_thread_id
+        }), 200
+    except Exception as e:
+        error_detail = {
+            'error': str(e),
+            'error_type': type(e).__name__,
+            'traceback': traceback.format_exc()
+        }
+        print("Database test error:", error_detail)
+        return jsonify({
+            'status': 'Database connection test failed',
+            'error': str(e),
+            'error_detail': error_detail
+        }), 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")

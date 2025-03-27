@@ -49,27 +49,80 @@ class RunDatabase:
         try:
             # Get database URL from environment variable
             database_url = os.getenv('DATABASE_URL')
+            
+            print(f"Connecting to database. DATABASE_URL exists: {database_url is not None}")
+            
             if database_url:
+                print(f"Using PostgreSQL connection with DATABASE_URL")
+                
                 # Parse the URL and create connection string
-                url = urlparse(database_url)
-                self.conn = psycopg2.connect(
-                    dbname=url.path[1:],
-                    user=url.username,
-                    password=url.password,
-                    host=url.hostname,
-                    port=url.port
-                )
-                self.cursor = self.conn.cursor(cursor_factory=DictCursor)
+                try:
+                    # Handle Heroku-specific "postgres://" vs "postgresql://" prefix
+                    if database_url.startswith('postgres://'):
+                        # Heroku uses postgres:// but psycopg2 wants postgresql://
+                        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+                        print("Converted postgres:// to postgresql:// for psycopg2 compatibility")
+                    
+                    url = urlparse(database_url)
+                    print(f"Database host: {url.hostname}, Database name: {url.path[1:] if url.path else 'None'}")
+                    
+                    # Connect to PostgreSQL
+                    self.conn = psycopg2.connect(
+                        dbname=url.path[1:] if url.path else 'postgres',
+                        user=url.username,
+                        password=url.password,
+                        host=url.hostname,
+                        port=url.port
+                    )
+                    self.cursor = self.conn.cursor(cursor_factory=DictCursor)
+                    print("PostgreSQL connection established successfully")
+                except Exception as pg_error:
+                    print(f"Error establishing PostgreSQL connection: {str(pg_error)}")
+                    print("Falling back to SQLite")
+                    self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
+                    self.conn.row_factory = sqlite3.Row
+                    self.cursor = self.conn.cursor()
             else:
                 # Fallback to SQLite for local development
+                print("No DATABASE_URL found, using SQLite database")
                 self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
                 self.conn.row_factory = sqlite3.Row
                 self.cursor = self.conn.cursor()
                 
+            # Test the connection
+            try:
+                if isinstance(self.conn, psycopg2.extensions.connection):
+                    self.cursor.execute("SELECT 1")
+                else:
+                    self.cursor.execute("SELECT 1")
+                print("Database connection test successful")
+            except Exception as test_error:
+                print(f"Database connection test failed: {str(test_error)}")
+                # If the connection test fails, try to reconnect or refresh
+                if isinstance(self.conn, psycopg2.extensions.connection):
+                    try:
+                        self.conn.close()
+                        # Simplest fallback - connect to SQLite instead
+                        self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
+                        self.conn.row_factory = sqlite3.Row
+                        self.cursor = self.conn.cursor()
+                        print("Reconnected using SQLite after PostgreSQL test failure")
+                    except Exception as fallback_error:
+                        print(f"Failed to reconnect: {str(fallback_error)}")
+                        raise
+                
             # Store the current thread ID
             self.conn_thread_id = threading.get_ident()
+            
+            # Print database type confirmation
+            if isinstance(self.conn, psycopg2.extensions.connection):
+                print("Using PostgreSQL database")
+            else:
+                print("Using SQLite database")
+                
         except Exception as e:
             print(f"Error connecting to database: {e}")
+            traceback.print_exc()
             raise
             
     def check_connection(self):
@@ -95,42 +148,99 @@ class RunDatabase:
         try:
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL initialization
+                # First check if the tables already exist
                 self.cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS users (
-                        id SERIAL PRIMARY KEY,
-                        username VARCHAR(255) UNIQUE NOT NULL,
-                        password_hash VARCHAR(255) NOT NULL
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'users'
                     )
                 """)
+                users_exists = self.cursor.fetchone()[0]
+                
+                if not users_exists:
+                    print("Creating PostgreSQL users table")
+                    self.cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS users (
+                            id SERIAL PRIMARY KEY,
+                            username VARCHAR(255) UNIQUE NOT NULL,
+                            password_hash VARCHAR(255) NOT NULL,
+                            email VARCHAR(255)
+                        )
+                    """)
+                else:
+                    # Check if email column exists
+                    self.cursor.execute("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.columns 
+                            WHERE table_schema = 'public' 
+                            AND table_name = 'users' 
+                            AND column_name = 'email'
+                        )
+                    """)
+                    email_exists = self.cursor.fetchone()[0]
+                    
+                    if not email_exists:
+                        print("Adding email column to users table")
+                        self.cursor.execute("""
+                            ALTER TABLE users ADD COLUMN email VARCHAR(255)
+                        """)
+                
+                # Check if runs table exists
                 self.cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS runs (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER REFERENCES users(id),
-                        date DATE NOT NULL,
-                        data JSONB,
-                        total_distance FLOAT,
-                        avg_pace FLOAT,
-                        avg_hr FLOAT,
-                        pace_limit FLOAT
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'runs'
                     )
                 """)
+                runs_exists = self.cursor.fetchone()[0]
+                
+                if not runs_exists:
+                    print("Creating PostgreSQL runs table")
+                    self.cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS runs (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER REFERENCES users(id),
+                            date DATE NOT NULL,
+                            data JSONB,
+                            total_distance FLOAT,
+                            avg_pace FLOAT,
+                            avg_hr FLOAT,
+                            pace_limit FLOAT
+                        )
+                    """)
+                    
+                # Check if profiles table exists
                 self.cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS profiles (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER REFERENCES users(id),
-                        age INTEGER,
-                        resting_hr INTEGER,
-                        weight FLOAT,
-                        gender INTEGER
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'profiles'
                     )
                 """)
+                profiles_exists = self.cursor.fetchone()[0]
+                
+                if not profiles_exists:
+                    print("Creating PostgreSQL profiles table")
+                    self.cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS profiles (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER REFERENCES users(id) UNIQUE,
+                            age INTEGER,
+                            resting_hr INTEGER,
+                            weight FLOAT,
+                            gender INTEGER
+                        )
+                    """)
             else:
                 # SQLite initialization
                 self.cursor.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE NOT NULL,
-                        password_hash TEXT NOT NULL
+                        password_hash TEXT NOT NULL,
+                        email TEXT
                     )
                 """)
                 self.cursor.execute("""
@@ -149,7 +259,7 @@ class RunDatabase:
                 self.cursor.execute("""
                     CREATE TABLE IF NOT EXISTS profiles (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER,
+                        user_id INTEGER UNIQUE,
                         age INTEGER,
                         resting_hr INTEGER,
                         weight REAL,
@@ -158,9 +268,14 @@ class RunDatabase:
                     )
                 """)
             self.conn.commit()
+            print("Database initialization complete")
         except Exception as e:
             print(f"Error initializing database: {e}")
-            self.conn.rollback()
+            traceback.print_exc()
+            try:
+                self.conn.rollback()
+            except:
+                pass
             raise
 
     def ensure_tables(self):
@@ -190,12 +305,20 @@ class RunDatabase:
             raise
 
     def save_run(self, user_id, run_data):
+        print(f"\n=== SAVE RUN CALLED ===")
+        print(f"User ID: {user_id}")
+        print(f"Run data: {run_data.get('date')}, distance: {run_data.get('total_distance')}")
+        
         try:
             # Check if we need to reconnect
             self.check_connection()
             
             # Extract key fields and apply proper type conversions
             user_id = int(user_id) if user_id else None
+            if not user_id:
+                print("ERROR: Invalid user_id (None or 0)")
+                return None
+            
             run_date = str(run_data.get('date', datetime.now().strftime('%Y-%m-%d')))
             
             # For numerical fields, ensure they're proper types
@@ -212,10 +335,21 @@ class RunDatabase:
                 else:
                     # Convert to JSON string
                     try:
-                        data_json = json.dumps(run_data['data'])
+                        # Use safe_json_dumps for better handling of special values
+                        data_json = safe_json_dumps(run_data['data'])
                     except Exception as json_err:
                         print(f"Error serializing run data: {str(json_err)}")
-                        data_json = json.dumps({})  # Empty if error
+                        traceback.print_exc()
+                        # Try standard json dumps as fallback
+                        try:
+                            data_json = json.dumps(run_data['data'])
+                        except:
+                            # Last resort: simplified data object
+                            data_json = json.dumps({
+                                "total_distance": total_distance,
+                                "avg_pace": avg_pace,
+                                "avg_hr": avg_hr
+                            })
             else:
                 data_json = json.dumps({})  # Empty if no data
             
@@ -225,28 +359,79 @@ class RunDatabase:
             print(f"  Distance: {total_distance}")
             print(f"  Avg Pace: {avg_pace}")
             print(f"  Avg HR: {avg_hr}")
+            print(f"  JSON data size: {len(data_json) if data_json else 0} bytes")
             
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL save - use transaction with explicit commit
+                original_autocommit = self.conn.autocommit
+                self.conn.autocommit = False
+                
                 try:
-                    # Start transaction
-                    self.conn.autocommit = False
+                    print("Using PostgreSQL database")
                     
-                    self.cursor.execute("""
-                        INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id
-                    """, (user_id, run_date, data_json, total_distance, avg_pace, avg_hr, pace_limit))
+                    # Start transaction
+                    self.cursor.execute("BEGIN")
+                    
+                    # Verify the user exists
+                    self.cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+                    user_record = self.cursor.fetchone()
+                    if not user_record:
+                        print(f"ERROR: User ID {user_id} does not exist in the database")
+                        self.conn.rollback()
+                        return None
+                    
+                    # Handle oversized JSON by removing detailed segment data if needed
+                    if data_json and len(data_json) > 1000000:  # If > 1MB
+                        print("WARNING: JSON data is very large, truncating detailed segments")
+                        data_obj = json.loads(data_json)
+                        # Keep only summary data, remove detailed segments
+                        if 'fast_segments' in data_obj:
+                            data_obj['fast_segments'] = data_obj['fast_segments'][:5] if data_obj['fast_segments'] else []
+                        if 'slow_segments' in data_obj:
+                            data_obj['slow_segments'] = data_obj['slow_segments'][:5] if data_obj['slow_segments'] else []
+                        data_json = json.dumps(data_obj)
+                    
+                    # Insert the run data
+                    print("Executing INSERT for PostgreSQL")
+                    try:
+                        self.cursor.execute("""
+                            INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            RETURNING id
+                        """, (user_id, run_date, data_json, total_distance, avg_pace, avg_hr, pace_limit))
+                    except psycopg2.Error as pg_query_error:
+                        print(f"PostgreSQL query error: {str(pg_query_error)}")
+                        # Try again with a smaller data object if the issue might be the size
+                        if "value too long" in str(pg_query_error) or "out of range" in str(pg_query_error):
+                            print("Trying again with simplified data object")
+                            simplified_data = {
+                                "total_distance": total_distance,
+                                "avg_pace": avg_pace,
+                                "avg_hr": avg_hr,
+                                "message": "Data was too large to store in full"
+                            }
+                            self.cursor.execute("""
+                                INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                RETURNING id
+                            """, (user_id, run_date, json.dumps(simplified_data), total_distance, avg_pace, avg_hr, pace_limit))
+                        else:
+                            # Re-raise if it's not a size issue
+                            raise
                     
                     # Get the ID
                     result = self.cursor.fetchone()
-                    run_id = result[0] if result else None
+                    if not result:
+                        print("ERROR: PostgreSQL INSERT did not return an ID")
+                        self.conn.rollback()
+                        return None
+                        
+                    run_id = result[0]
+                    print(f"PostgreSQL run_id from RETURNING: {run_id}")
                     
                     # Commit transaction
                     self.conn.commit()
-                    self.conn.autocommit = True
-                    
-                    print(f"PostgreSQL save complete, run_id: {run_id}")
+                    print(f"Transaction committed for run_id: {run_id}")
                     return run_id
                     
                 except Exception as pg_error:
@@ -255,15 +440,31 @@ class RunDatabase:
                     traceback.print_exc()
                     try:
                         self.conn.rollback()
-                    except:
-                        pass
+                        print("Transaction rolled back")
+                    except Exception as rollback_error:
+                        print(f"Rollback error: {str(rollback_error)}")
                     return None
+                finally:
+                    # Restore original autocommit setting
+                    self.conn.autocommit = original_autocommit
             else:
                 # SQLite save - use transaction with explicit commit
                 try:
+                    print("Using SQLite database")
+                    
                     # Start transaction
                     self.cursor.execute("BEGIN TRANSACTION")
                     
+                    # Verify the user exists
+                    self.cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+                    user_record = self.cursor.fetchone()
+                    if not user_record:
+                        print(f"ERROR: User ID {user_id} does not exist in the database")
+                        self.cursor.execute("ROLLBACK")
+                        return None
+                    
+                    # Insert the run data
+                    print("Executing INSERT for SQLite")
                     self.cursor.execute("""
                         INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -271,11 +472,16 @@ class RunDatabase:
                     
                     # Get the ID
                     run_id = self.cursor.lastrowid
+                    if not run_id:
+                        print("ERROR: SQLite INSERT did not return a lastrowid")
+                        self.cursor.execute("ROLLBACK")
+                        return None
+                        
+                    print(f"SQLite run_id from lastrowid: {run_id}")
                     
                     # Commit transaction
                     self.cursor.execute("COMMIT")
-                    
-                    print(f"SQLite save complete, run_id: {run_id}")
+                    print(f"Transaction committed for run_id: {run_id}")
                     return run_id
                     
                 except Exception as sqlite_error:
@@ -284,21 +490,26 @@ class RunDatabase:
                     traceback.print_exc()
                     try:
                         self.cursor.execute("ROLLBACK")
-                    except:
-                        pass
+                        print("Transaction rolled back")
+                    except Exception as rollback_error:
+                        print(f"Rollback error: {str(rollback_error)}")
                     return None
                 
         except Exception as e:
-            print(f"Error saving run: {e}")
+            print(f"Unexpected error saving run: {str(e)}")
             traceback.print_exc()
+            
             try:
                 # Additional roll back if outer transaction exists
                 if isinstance(self.conn, psycopg2.extensions.connection):
                     self.conn.rollback()
+                    print("Outer transaction rolled back (PostgreSQL)")
                 else:
                     self.cursor.execute("ROLLBACK")
-            except:
-                pass  # Ignore rollback errors
+                    print("Outer transaction rolled back (SQLite)")
+            except Exception as rollback_error:
+                print(f"Outer rollback error: {str(rollback_error)}")
+            
             return None
 
     def get_all_runs(self, user_id):
