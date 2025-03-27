@@ -12,9 +12,6 @@ from functools import wraps
 import secrets
 import traceback
 from json import JSONEncoder
-from app.routes.auth import auth_bp
-from app.routes.runs import runs_bp
-from app.routes.profile import profile_bp
 from app import app
 
 # Use the custom encoder for all JSON responses
@@ -288,11 +285,6 @@ def save_profile():
         print(f"Error saving profile: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
-# Register blueprints
-app.register_blueprint(auth_bp)
-app.register_blueprint(runs_bp)
-app.register_blueprint(profile_bp)
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
