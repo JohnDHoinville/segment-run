@@ -43,8 +43,7 @@ class RunDatabase:
         self.cursor = None
         self.conn_thread_id = None
         self.connect()
-            self.init_db()
-
+        self.init_db()
     def connect(self):
         try:
             # Get database URL from environment variable
