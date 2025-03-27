@@ -502,9 +502,27 @@ def analyze():
         print(f"Processed form data: pace_limit={pace_limit}, age={age}, resting_hr={resting_hr}")
         
         # Get user profile for additional metrics
-        db.check_connection()  # Ensure connection is valid
-        profile = db.get_profile(session['user_id'])
-        print("\nProfile data:", profile)
+        # Force database reset to ensure a clean connection
+        db.conn = None
+        db.cursor = None
+        db.connect()
+        print("\n=== Database connection refreshed ===")
+        
+        # Try to get the profile with a direct connection check
+        try:
+            profile = db.get_profile(session['user_id'])
+            print("\nProfile data:", profile)
+        except Exception as profile_error:
+            print(f"Error getting profile: {str(profile_error)}")
+            # Create default profile if fetch fails
+            profile = {
+                'user_id': session['user_id'],
+                'age': 30,
+                'resting_hr': 60,
+                'weight': 70,
+                'gender': 0
+            }
+            print(f"Using default profile: {profile}")
         
         if not file or not file.filename.endswith('.gpx'):
             print("Invalid file format")
@@ -521,6 +539,10 @@ def analyze():
         print("\nFile saved to:", temp_path)
         print("File exists:", os.path.exists(temp_path))
         print("File size:", os.path.getsize(temp_path))
+        
+        analysis_result = None
+        was_saved = False
+        run_id = None
         
         try:
             # Analyze the file
@@ -561,7 +583,7 @@ def analyze():
             # Force a database reconnection
             db.conn = None
             db.cursor = None
-            db.check_connection()
+            db.connect()
             print("Database connection reset to ensure a fresh connection")
             
             # Actually save the run
@@ -607,46 +629,107 @@ def analyze():
                 print(f"Database test error: {str(db_test_error)}")
                 print(traceback.format_exc())
             
-            # Save the run
-            run_id = db.save_run(user_id, run_data)
+            # Number of save attempts
+            max_save_attempts = 3
+            save_attempts = 0
             
+            while save_attempts < max_save_attempts:
+                save_attempts += 1
+                print(f"\nSave attempt #{save_attempts}")
+                
+                try:
+                    # Different approaches based on attempt number
+                    if save_attempts == 1:
+                        # First attempt - full data
+                        run_id = db.save_run(user_id, run_data)
+                    elif save_attempts == 2:
+                        # Second attempt - simplified data
+                        print("Trying simplified data...")
+                        simplified_data = {
+                            'date': run_date,
+                            'data': {
+                                'total_distance': total_distance,
+                                'avg_pace': avg_pace,
+                                'avg_hr': avg_hr,
+                                'simplified': True
+                            },
+                            'total_distance': total_distance,
+                            'avg_pace': avg_pace,
+                            'avg_hr': avg_hr,
+                            'pace_limit': pace_limit
+                        }
+                        run_id = db.save_run(user_id, simplified_data)
+                    else:
+                        # Last attempt - minimal data
+                        print("Trying minimal data...")
+                        minimal_data = {
+                            'date': run_date,
+                            'data': json.dumps({
+                                'total_distance': total_distance,
+                                'avg_pace': avg_pace,
+                                'avg_hr': avg_hr,
+                                'minimal': True
+                            }),
+                            'total_distance': total_distance,
+                            'avg_pace': avg_pace,
+                            'avg_hr': avg_hr,
+                            'pace_limit': pace_limit
+                        }
+                        run_id = db.save_run(user_id, minimal_data)
+                
+                    # Check if save was successful
+                    if run_id:
+                        print(f"Run saved successfully with ID: {run_id} on attempt #{save_attempts}")
+                        was_saved = True
+                        break
+                    else:
+                        print(f"Save attempt #{save_attempts} failed")
+                        # Force database reconnection between attempts
+                        db.conn = None
+                        db.cursor = None
+                        db.connect()
+                except Exception as save_error:
+                    print(f"Error during save attempt #{save_attempts}: {str(save_error)}")
+                    traceback.print_exc()
+                    # Force database reconnection between attempts
+                    try:
+                        db.conn = None
+                        db.cursor = None
+                        db.connect()
+                    except:
+                        print("Failed to reconnect database after save error")
+            
+            if not was_saved:
+                print("\nWARNING: Failed to save run after all attempts")
+            
+            # Try to verify save was successful
             if run_id:
-                print(f"Run saved successfully with ID: {run_id}")
-                was_saved = True
-            else:
-                print("Run was not saved! save_run returned None.")
-                print("Attempting one more time with simplified data...")
-                
-                # Try one more time with simplified data
-                simplified_data = {
-                    'date': run_date,
-                    'data': {
-                        'total_distance': total_distance,
-                        'avg_pace': avg_pace,
-                        'avg_hr': avg_hr,
-                        'simplified': True
-                    },
-                    'total_distance': total_distance,
-                    'avg_pace': avg_pace,
-                    'avg_hr': avg_hr,
-                    'pace_limit': pace_limit
-                }
-                
-                # Last attempt to save
-                run_id = db.save_run(user_id, simplified_data)
-                was_saved = run_id is not None and run_id > 0
-                
-                if was_saved:
-                    print(f"Simplified run data saved with ID: {run_id}")
-                else:
-                    print("Failed to save even simplified data. Continuing with analysis only.")
-
-            # Return analysis results
+                try:
+                    # Force connection refresh before verification
+                    db.conn = None
+                    db.cursor = None
+                    db.connect()
+                    
+                    test_run = db.get_run_by_id(run_id)
+                    if test_run:
+                        print(f"Verified run was saved correctly with ID: {run_id}")
+                        was_saved = True
+                    else:
+                        print(f"WARNING: Could not verify run with ID {run_id}")
+                        was_saved = False
+                except Exception as verify_error:
+                    print(f"Error verifying run: {str(verify_error)}")
+                    traceback.print_exc()
+                    was_saved = False
+            
+            # Return analysis results with detailed save status
             response = jsonify({
                 'message': 'Analysis complete',
                 'data': analysis_result,
                 'run_id': run_id if run_id else 0,
                 'saved': was_saved,
+                'save_attempts': save_attempts,
+                'save_error': None if was_saved else "Failed to save run data after multiple attempts",
                 'distance': total_distance,
                 'avg_pace': avg_pace,
                 'avg_hr': avg_hr
@@ -661,17 +744,6 @@ def analyze():
                 
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Vary'] = 'Origin'
-            
-            # Try to verify save was successful
-            try:
-                if run_id:
-                    test_run = db.get_run_by_id(run_id)
-                    if test_run:
-                        print(f"Verified run was saved correctly with ID: {run_id}")
-                    else:
-                        print(f"WARNING: Could not verify run with ID {run_id}")
-            except Exception as verify_error:
-                print(f"Error verifying run: {str(verify_error)}")
             
             return response
             
@@ -1782,12 +1854,14 @@ def get_runs():
         print("\n=== Getting Run History ===")
         print(f"User ID: {session['user_id']}")
         
-        # Make sure we're using the correct database connection
+        # Force database reset to ensure a clean connection
+        db.conn = None
+        db.cursor = None
+        db.connect()
+        print("Database connection reset to ensure a fresh connection")
+        
+        # Get all runs for the user
         try:
-            # Force connection check/reconnect if needed
-            db.check_connection()
-            
-            # Get all runs for the user
             runs = db.get_all_runs(session['user_id'])
             print(f"Found {len(runs)} runs in database")
             
@@ -1847,12 +1921,72 @@ def get_runs():
         except Exception as db_error:
             print(f"Database error: {str(db_error)}")
             traceback.print_exc()
-            raise
+            
+            # Try once more with a fresh connection
+            try:
+                print("Retrying with a fresh database connection...")
+                db.conn = None
+                db.cursor = None
+                db.connect()
+                
+                runs = db.get_all_runs(session['user_id'])
+                print(f"Retry succeeded! Found {len(runs)} runs in database")
+                
+                formatted_runs = []
+                for run in runs:
+                    try:
+                        # Process each run
+                        run_id = run.get('id')
+                        run_date = run.get('date')
+                        run_distance = run.get('total_distance')
+                        
+                        # For data field, convert from JSON string if needed
+                        run_data = None
+                        if 'data' in run and run['data']:
+                            if isinstance(run['data'], str):
+                                try:
+                                    run_data = json.loads(run['data'])
+                                except:
+                                    run_data = {}
+                            else:
+                                run_data = run['data']
+                        
+                        # Create a formatted representation
+                        formatted_run = {
+                            'id': run_id,
+                            'date': run_date,
+                            'distance': run_distance or 0,
+                            'data': run_data
+                        }
+                        formatted_runs.append(formatted_run)
+                    except Exception as inner_run_error:
+                        print(f"Error processing run after retry: {str(inner_run_error)}")
+                
+                response = jsonify(formatted_runs)
+                
+                # Set CORS headers
+                origin = request.headers.get('Origin', '')
+                if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                else:
+                    response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+                    
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Vary'] = 'Origin'
+                
+                return response
+            except Exception as retry_error:
+                print(f"Retry also failed: {str(retry_error)}")
+                traceback.print_exc()
+                raise db_error  # Re-raise the original error
             
     except Exception as e:
         print(f"Error getting runs: {str(e)}")
         traceback.print_exc()
-        error_response = jsonify({'error': str(e)})
+        error_response = jsonify({
+            'error': str(e),
+            'message': 'Failed to retrieve run history'
+        })
         
         # Set CORS headers even on error
         origin = request.headers.get('Origin', '')
@@ -1997,6 +2131,52 @@ def test_database():
             'error': str(e),
             'error_detail': error_detail
         }), 500
+
+@app.route('/db-test-detail', methods=['GET'])
+def test_database_detail():
+    try:
+        print("\n===== Running Detailed Database Tests =====")
+        
+        # Import the test function from our new script
+        from db_test import test_database_connection
+        
+        # Run all the tests
+        results = test_database_connection()
+        
+        # Add HTTP headers for CORS
+        response = jsonify(results)
+        
+        # Set CORS headers
+        origin = request.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
+        
+        return response
+    except Exception as e:
+        print(f"Error running detailed database tests: {str(e)}")
+        traceback.print_exc()
+        
+        error_response = jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        })
+        
+        # Set CORS headers even on error
+        origin = request.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+            error_response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
+        error_response.headers['Vary'] = 'Origin'
+        
+        return error_response, 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")

@@ -66,18 +66,27 @@ class RunDatabase:
                     url = urlparse(database_url)
                     print(f"Database host: {url.hostname}, Database name: {url.path[1:] if url.path else 'None'}")
                     
-                    # Connect to PostgreSQL
-                    self.conn = psycopg2.connect(
-                        dbname=url.path[1:] if url.path else 'postgres',
-                        user=url.username,
-                        password=url.password,
-                        host=url.hostname,
-                        port=url.port
-                    )
-                    self.cursor = self.conn.cursor(cursor_factory=DictCursor)
-                    print("PostgreSQL connection established successfully")
+                    # Connect to PostgreSQL with explicit connection parameters
+                    try:
+                        self.conn = psycopg2.connect(
+                            dbname=url.path[1:] if url.path else 'postgres',
+                            user=url.username,
+                            password=url.password,
+                            host=url.hostname,
+                            port=url.port
+                        )
+                        self.cursor = self.conn.cursor(cursor_factory=DictCursor)
+                        print("PostgreSQL connection established successfully")
+                    except psycopg2.OperationalError as op_error:
+                        print(f"PostgreSQL operational error: {str(op_error)}")
+                        # Try direct connection string approach
+                        print("Trying connection string approach instead")
+                        self.conn = psycopg2.connect(database_url)
+                        self.cursor = self.conn.cursor(cursor_factory=DictCursor)
+                        print("PostgreSQL connection via connection string successful")
                 except Exception as pg_error:
                     print(f"Error establishing PostgreSQL connection: {str(pg_error)}")
+                    traceback.print_exc()
                     print("Falling back to SQLite")
                     self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
                     self.conn.row_factory = sqlite3.Row
@@ -98,6 +107,7 @@ class RunDatabase:
                 print("Database connection test successful")
             except Exception as test_error:
                 print(f"Database connection test failed: {str(test_error)}")
+                traceback.print_exc()
                 # If the connection test fails, try to reconnect or refresh
                 if isinstance(self.conn, psycopg2.extensions.connection):
                     try:
@@ -123,26 +133,59 @@ class RunDatabase:
         except Exception as e:
             print(f"Error connecting to database: {e}")
             traceback.print_exc()
+            # Set conn and cursor to None to ensure we know they're invalid
+            self.conn = None
+            self.cursor = None
             raise
             
     def check_connection(self):
         """Reconnect if we're in a different thread from the one that created the connection"""
         current_thread_id = threading.get_ident()
-        if self.conn_thread_id != current_thread_id:
+        
+        # First check if we need to reconnect due to thread change
+        thread_mismatch = self.conn_thread_id != current_thread_id
+        
+        # Also check if connection is None or potentially invalid
+        connection_invalid = self.conn is None or self.cursor is None
+        
+        if thread_mismatch or connection_invalid:
+            print(f"Connection check: Thread mismatch: {thread_mismatch}, Connection invalid: {connection_invalid}")
             print(f"Thread ID mismatch. Connection thread: {self.conn_thread_id}, Current thread: {current_thread_id}")
             try:
                 # Close existing connection
                 if self.cursor:
-                    self.cursor.close()
+                    try:
+                        self.cursor.close()
+                    except Exception as cursor_error:
+                        print(f"Error closing cursor: {str(cursor_error)}")
+                        
                 if self.conn:
-                    self.conn.close()
-                    
+                    try:
+                        self.conn.close()
+                    except Exception as conn_error:
+                        print(f"Error closing connection: {str(conn_error)}")
+                        
                 # Create a new connection
                 self.connect()
                 print(f"Successfully reconnected in thread {current_thread_id}")
+                return True
             except Exception as e:
                 print(f"Error reconnecting to database: {e}")
-                raise
+                traceback.print_exc()
+                # Try one more time as a last resort
+                try:
+                    print("Attempting emergency reconnection...")
+                    self.conn = None
+                    self.cursor = None
+                    self.connect()
+                    print("Emergency reconnection successful")
+                    return True
+                except Exception as emergency_error:
+                    print(f"Emergency reconnection failed: {str(emergency_error)}")
+                    raise
+        
+        # Connection is valid
+        return False
 
     def init_db(self):
         try:
@@ -311,7 +354,20 @@ class RunDatabase:
         
         try:
             # Check if we need to reconnect
-            self.check_connection()
+            connection_status = self.check_connection()
+            print(f"Connection check completed. Reconnection performed: {connection_status}")
+            
+            # Verify we have a valid connection
+            if self.conn is None or self.cursor is None:
+                print("ERROR: Database connection is not valid after check_connection")
+                try:
+                    # Emergency reconnection attempt
+                    print("Attempting emergency reconnection...")
+                    self.connect()
+                    print("Emergency reconnection successful")
+                except Exception as emergency_error:
+                    print(f"Emergency reconnection failed: {str(emergency_error)}")
+                    return None
             
             # Extract key fields and apply proper type conversions
             user_id = int(user_id) if user_id else None
@@ -361,7 +417,11 @@ class RunDatabase:
             print(f"  Avg HR: {avg_hr}")
             print(f"  JSON data size: {len(data_json) if data_json else 0} bytes")
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            # Check database type
+            using_postgres = isinstance(self.conn, psycopg2.extensions.connection)
+            print(f"Database type: {'PostgreSQL' if using_postgres else 'SQLite'}")
+            
+            if using_postgres:
                 # PostgreSQL save - use transaction with explicit commit
                 original_autocommit = self.conn.autocommit
                 self.conn.autocommit = False
@@ -401,6 +461,7 @@ class RunDatabase:
                         """, (user_id, run_date, data_json, total_distance, avg_pace, avg_hr, pace_limit))
                     except psycopg2.Error as pg_query_error:
                         print(f"PostgreSQL query error: {str(pg_query_error)}")
+                        traceback.print_exc()
                         # Try again with a smaller data object if the issue might be the size
                         if "value too long" in str(pg_query_error) or "out of range" in str(pg_query_error):
                             print("Trying again with simplified data object")
@@ -443,10 +504,24 @@ class RunDatabase:
                         print("Transaction rolled back")
                     except Exception as rollback_error:
                         print(f"Rollback error: {str(rollback_error)}")
+                    
+                    # Attempt reconnection as this might be a connection issue
+                    try:
+                        print("Attempting reconnection after save error...")
+                        self.conn = None
+                        self.cursor = None
+                        self.connect()
+                        print("Reconnection successful, but save failed")
+                    except Exception as reconnect_err:
+                        print(f"Reconnection failed: {str(reconnect_err)}")
+                        
                     return None
                 finally:
                     # Restore original autocommit setting
-                    self.conn.autocommit = original_autocommit
+                    try:
+                        self.conn.autocommit = original_autocommit
+                    except:
+                        pass  # Ignore if connection was lost
             else:
                 # SQLite save - use transaction with explicit commit
                 try:
