@@ -198,7 +198,16 @@ def serve(path):
             # Try different possible locations for index.html
             if os.path.exists('templates/index.html'):
                 print("Serving index.html from templates directory")
-                response = send_from_directory('templates', 'index.html')
+                
+                # Read the file and send it directly to avoid path issues
+                with open('templates/index.html', 'r') as f:
+                    content = f.read()
+                
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='text/html'
+                )
             else:
                 print("No index.html found, creating fallback HTML page")
                 html = """
@@ -627,6 +636,45 @@ def favicon():
         return app.response_class(
             response='',
             status=204,
+        )
+
+# Handle manifest.json, robots.txt and other root static files
+@app.route('/manifest.json')
+@app.route('/robots.txt')
+@app.route('/logo192.png')
+@app.route('/logo512.png')
+def handle_react_static_files():
+    try:
+        # Get the filename from the request path
+        filename = request.path.lstrip('/')
+        
+        # Check if the file exists in the static directory
+        if os.path.exists(os.path.join('static', filename)):
+            response = send_from_directory('static', filename)
+            
+            # Set proper cache headers
+            response.headers['Cache-Control'] = 'public, max-age=31536000'
+            
+            # Set appropriate content type
+            if filename.endswith('.json'):
+                response.headers['Content-Type'] = 'application/json'
+            elif filename.endswith('.txt'):
+                response.headers['Content-Type'] = 'text/plain'
+            elif filename.endswith('.png'):
+                response.headers['Content-Type'] = 'image/png'
+                
+            return response
+        else:
+            # Return empty response if file doesn't exist
+            return app.response_class(
+                response='',
+                status=204
+            )
+    except Exception as e:
+        print(f"Error serving static file {filename}: {str(e)}")
+        return app.response_class(
+            response='',
+            status=204
         )
 
 if __name__ == '__main__':
