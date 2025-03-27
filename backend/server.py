@@ -15,6 +15,7 @@ from json import JSONEncoder
 from app import app
 import psycopg2
 import sys
+from werkzeug.security import generate_password_hash
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -510,8 +511,8 @@ def analyze():
         
         # Try to get the profile with a direct connection check
         try:
-            profile = db.get_profile(session['user_id'])
-            print("\nProfile data:", profile)
+        profile = db.get_profile(session['user_id'])
+        print("\nProfile data:", profile)
         except Exception as profile_error:
             print(f"Error getting profile: {str(profile_error)}")
             # Create default profile if fetch fails
@@ -1442,109 +1443,94 @@ def logout():
 
 @app.route('/auth/register', methods=['POST', 'OPTIONS'])
 def register():
-    print("\n=== Register User ===")
+    print("\n=== Register Request ===")
+    print(f"Session: {dict(session)}")
+    print(f"Request data: {request.json}")
+    
+    if request.method == 'OPTIONS':
+        return handle_preflight()
+        
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    email = data.get('email', '')
+    
+    # Validate inputs
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
+        
+    # Check if username already exists
     try:
-        data = request.json
-        print(f"Registration attempt for: {data.get('username', 'unknown')}")
+        # Force database reconnection
+        db.conn = None
+        db.cursor = None
+        db.connect()
         
-        username = data.get('username')
-        password = data.get('password')
-        email = data.get('email')
-        
-        if not username or not password or not email:
-            print("Missing required registration fields")
-            error_response = jsonify({'error': 'Missing required fields'})
-            
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 400
-            
-        # Check if user already exists
-        existing_user = db.get_user_by_username(username)
-        if existing_user:
-            print(f"Username already exists: {username}")
-            error_response = jsonify({'error': 'Username already exists'})
-            
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 409
-            
-        # Register the new user
-        user_id = db.register_user(username, password, email)
-        if user_id:
-            print(f"Registration successful for user: {username}")
-            session['user_id'] = user_id
-            session.permanent = True
-            
-            # Create default profile for the user
-            db.save_profile(
-                user_id=user_id,
-                age=30,  # Default values
-                resting_hr=60,
-                weight=70,
-                gender=0
-            )
-            
-            success_response = jsonify({
-                'message': 'Registration successful',
-                'user_id': user_id,
-                'username': username
-            })
-            
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                success_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            success_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            success_response.headers['Vary'] = 'Origin'
-            return success_response
+        # Check if username exists
+        if isinstance(db.conn, psycopg2.extensions.connection):
+            db.cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
         else:
-            print(f"Failed to register user: {username}")
-            error_response = jsonify({'error': 'Registration failed'})
+            db.cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
             
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
+        existing_user = db.cursor.fetchone()
+        
+        if existing_user:
+            return jsonify({'error': 'Username already exists'}), 400
+            
+        # Hash the password
+        password_hash = generate_password_hash(password)
+        
+        # Insert the new user
+        if isinstance(db.conn, psycopg2.extensions.connection):
+            db.cursor.execute(
+                "INSERT INTO users (username, password_hash, email) VALUES (%s, %s, %s) RETURNING id",
+                (username, password_hash, email)
+            )
+            user_id = db.cursor.fetchone()[0]
+            db.conn.commit()
+        else:
+            db.cursor.execute(
+                "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)",
+                (username, password_hash, email)
+            )
+            user_id = db.cursor.lastrowid
+            db.conn.commit()
+            
+        print(f"User created successfully with ID: {user_id}")
+        
+        # Create default profile
+        try:
+            if isinstance(db.conn, psycopg2.extensions.connection):
+                db.cursor.execute(
+                    "INSERT INTO profiles (user_id, age, weight, gender, resting_hr) VALUES (%s, %s, %s, %s, %s)",
+                    (user_id, 30, 70, 0, 60)
+                )
             else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 500
-            
+                db.cursor.execute(
+                    "INSERT INTO profiles (user_id, age, weight, gender, resting_hr) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, 30, 70, 0, 60)
+                )
+            db.conn.commit()
+            print(f"Default profile created for user ID: {user_id}")
+        except Exception as profile_error:
+            print(f"Error creating profile: {str(profile_error)}")
+            traceback.print_exc()
+        
+        # Save user_id to session
+        session['user_id'] = user_id
+        session.modified = True
+        
+        print(f"Session after login: {dict(session)}")
+        
+        return jsonify({
+            'message': 'User registered successfully',
+            'user_id': user_id
+        })
+    
     except Exception as e:
         print(f"Registration error: {str(e)}")
         traceback.print_exc()
-        error_response = jsonify({'error': str(e)})
-        
-        # Set CORS headers even on error
-        origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            error_response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-        error_response.headers['Vary'] = 'Origin'
-        return error_response, 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/static/js/main.ed081796.js.map')
 def serve_main_js_map():
@@ -2252,6 +2238,99 @@ def test_database_detail():
         error_response.headers['Vary'] = 'Origin'
         
         return error_response, 500
+
+@app.route('/create-admin', methods=['GET'])
+def create_admin():
+    """
+    Temporary endpoint to create an admin user for testing.
+    This should be removed in production.
+    """
+    try:
+        print("\n=== Creating Admin User ===")
+        
+        # Force a fresh database connection
+        db.conn = None
+        db.cursor = None
+        db.connect()
+        
+        # Check if admin user already exists
+        if isinstance(db.conn, psycopg2.extensions.connection):
+            db.cursor.execute("SELECT id FROM users WHERE username = %s", ('admin',))
+        else:
+            db.cursor.execute("SELECT id FROM users WHERE username = ?", ('admin',))
+            
+        existing_user = db.cursor.fetchone()
+        
+        if existing_user:
+            print(f"Admin user already exists with ID: {existing_user[0]}")
+            return jsonify({
+                'message': 'Admin user already exists',
+                'user_id': existing_user[0]
+            })
+        
+        # Create the admin user with a simple password
+        password = "admin123"
+        
+        # Generate password hash
+        password_hash = generate_password_hash(password)
+        
+        # Insert the user
+        try:
+            if isinstance(db.conn, psycopg2.extensions.connection):
+                db.cursor.execute(
+                    "INSERT INTO users (username, password_hash, email) VALUES (%s, %s, %s) RETURNING id",
+                    ('admin', password_hash, 'admin@example.com')
+                )
+                user_id = db.cursor.fetchone()[0]
+                db.conn.commit()
+            else:
+                db.cursor.execute(
+                    "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)",
+                    ('admin', password_hash, 'admin@example.com')
+                )
+                user_id = db.cursor.lastrowid
+                db.conn.commit()
+                
+            print(f"Admin user created with ID: {user_id}")
+            
+            # Create a default profile for the user
+            try:
+                if isinstance(db.conn, psycopg2.extensions.connection):
+                    db.cursor.execute(
+                        "INSERT INTO profiles (user_id, age, weight, gender, resting_hr) VALUES (%s, %s, %s, %s, %s)",
+                        (user_id, 30, 70, 0, 60)
+                    )
+                else:
+                    db.cursor.execute(
+                        "INSERT INTO profiles (user_id, age, weight, gender, resting_hr) VALUES (?, ?, ?, ?, ?)",
+                        (user_id, 30, 70, 0, 60)
+                    )
+                db.conn.commit()
+                print(f"Default profile created for user ID: {user_id}")
+            except Exception as profile_error:
+                print(f"Error creating profile: {str(profile_error)}")
+                traceback.print_exc()
+            
+            return jsonify({
+                'message': 'Admin user created successfully',
+                'user_id': user_id,
+                'username': 'admin',
+                'password': password
+            })
+            
+        except Exception as insert_error:
+            print(f"Error inserting user: {str(insert_error)}")
+            traceback.print_exc()
+            return jsonify({
+                'error': f'Failed to create admin user: {str(insert_error)}'
+            }), 500
+            
+    except Exception as e:
+        print(f"Error creating admin user: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Unexpected error: {str(e)}'
+        }), 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
