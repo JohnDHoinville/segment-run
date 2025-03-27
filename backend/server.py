@@ -100,10 +100,10 @@ def serve_static(filename):
         allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
         
         # Try both locations
-        if os.path.exists(os.path.join('static', filename)):
+        if os.path.exists(os.path.join('build/static', filename)):
+            response = send_from_directory('build/static', filename)
+        elif os.path.exists(os.path.join('static', filename)):
             response = send_from_directory('static', filename)
-        elif os.path.exists(os.path.join('backend/static', filename)):
-            response = send_from_directory('backend/static', filename)
         else:
             print(f"File not found in either location: {filename}")
             return jsonify({"error": "File not found"}), 404
@@ -151,7 +151,7 @@ def serve(path):
             return serve_static(static_path)
         
         # Then check if it's a direct file request
-        build_dir = '/app/build'
+        build_dir = 'build'
         file_path = os.path.join(build_dir, path)
         
         print(f"Build directory: {build_dir}")
