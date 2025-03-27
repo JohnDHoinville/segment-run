@@ -43,7 +43,7 @@ class RunDatabase:
         self.cursor = None
         self.conn_thread_id = None
         self.connect()
-        self.init_db()
+            self.init_db()
 
     def connect(self):
         try:
@@ -279,22 +279,22 @@ class RunDatabase:
             else:
                 # SQLite initialization
                 self.cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS users (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        username TEXT UNIQUE NOT NULL,
-                        password_hash TEXT NOT NULL,
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
                         email TEXT
                     )
                 """)
                 self.cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS runs (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                CREATE TABLE IF NOT EXISTS runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER,
-                        date TEXT NOT NULL,
+                    date TEXT NOT NULL,
                         data TEXT,
-                        total_distance REAL,
-                        avg_pace REAL,
-                        avg_hr REAL,
+                    total_distance REAL,
+                    avg_pace REAL,
+                    avg_hr REAL,
                         pace_limit REAL,
                         FOREIGN KEY (user_id) REFERENCES users (id)
                     )
@@ -630,7 +630,7 @@ class RunDatabase:
                 
                 # Convert to list of dictionaries with proper handling
                 result = []
-                for run in runs:
+            for run in runs:
                     try:
                         # Start with a basic dictionary conversion 
                         run_dict = dict(run)
@@ -641,7 +641,7 @@ class RunDatabase:
                             if isinstance(run_dict['data'], str):
                                 try:
                                     run_dict['data'] = json.loads(run_dict['data'])
-                                except json.JSONDecodeError:
+                        except json.JSONDecodeError:
                                     print(f"Failed to parse JSON data for run ID {run_dict.get('id')}")
                                     run_dict['data'] = {}
                             # If it's already a dict/object (from psycopg2), use as is
@@ -681,7 +681,7 @@ class RunDatabase:
         try:
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
-                if user_id:
+            if user_id:
                     self.cursor.execute("""
                         SELECT * FROM runs 
                         WHERE id = %s AND user_id = %s
@@ -905,7 +905,7 @@ class RunDatabase:
                 self.conn.rollback()
             except:
                 pass  # Ignore rollback errors
-            return None
+            return None 
 
     def update_password(self, user_id, current_password, new_password):
         try:
@@ -940,7 +940,7 @@ class RunDatabase:
                     """, (new_hash, user_id))
                 self.conn.commit()
                 return True
-            return False
+                return False
         except Exception as e:
             print(f"Error updating password: {e}")
             self.conn.rollback()
