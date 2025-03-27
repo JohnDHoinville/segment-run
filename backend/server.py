@@ -52,7 +52,16 @@ CORS(app,
     methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Cache-Control"],
     supports_credentials=True,
-    expose_headers=["Content-Type", "Authorization", "Cache-Control"]
+    expose_headers=["Content-Type", "Authorization", "Cache-Control"],
+    resources={
+        r"/*": {
+            "origins": ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
+            "methods": ["GET", "POST", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
+            "supports_credentials": True,
+            "expose_headers": ["Content-Type", "Authorization", "Cache-Control"]
+        }
+    }
 )
 
 # Add debug logging for session
@@ -101,27 +110,30 @@ def serve_static(path):
             print(f"Unsupported file type: {path}")
             return f"Unsupported file type: {path}", 404
             
-        # Split the path into components
+        # Split the path into components and get the file name
         path_parts = path.split('/')
-        print(f"Path parts: {path_parts}")
+        file_name = path_parts[-1]
         
-        # Find the static type directory (js or css)
-        if static_type not in ['js', 'css']:
-            print(f"Invalid static type: {static_type}")
-            return f"Invalid static type: {static_type}", 404
+        # Determine the static type from the path
+        if 'js/' in path:
+            static_type = 'js'
+        elif 'css/' in path:
+            static_type = 'css'
             
+        print(f"Path parts: {path_parts}")
+        print(f"File name: {file_name}")
+        print(f"Static type: {static_type}")
+        
         # Construct the full path
         static_dir = os.path.join('/app/build/static', static_type)
-        file_path = path_parts[-1]  # Just use the filename
-        full_path = os.path.join(static_dir, file_path)
+        full_path = os.path.join(static_dir, file_name)
         
-        print(f"Static type: {static_type}")
-        print(f"File path: {file_path}")
         print(f"Static directory: {static_dir}")
         print(f"Full path: {full_path}")
         print(f"Directory exists: {os.path.exists(static_dir)}")
         print(f"File exists: {os.path.exists(full_path)}")
         print(f"MIME type: {mime_type}")
+        print(f"Directory contents: {os.listdir(static_dir)}")
         
         if not os.path.exists(static_dir):
             print(f"Static directory does not exist: {static_dir}")
@@ -132,7 +144,7 @@ def serve_static(path):
             return f"File not found: {full_path}", 404
             
         print(f"Serving file from {static_dir}")
-        response = send_from_directory(static_dir, file_path, mimetype=mime_type)
+        response = send_from_directory(static_dir, file_name, mimetype=mime_type)
         response.headers['Cache-Control'] = 'public, max-age=31536000'
         
         # Set CORS headers based on the request origin
