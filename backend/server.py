@@ -92,51 +92,66 @@ def serve_static(filename):
         
         # Default CORS headers - set to allow the current host
         headers = {
-            'Access-Control-Allow-Origin': request.headers.get('Origin', '*'),
+            'Access-Control-Allow-Origin': '*',  # Set to wildcard to ensure it works
             'Access-Control-Allow-Credentials': 'true',
             'Vary': 'Origin',
             'Cache-Control': 'public, max-age=31536000'
         }
         
-        # Try to serve the file from our static directory structure
-        try:
-            # First try: handle js/filename.js pattern
-            if filename.startswith('js/'):
-                js_file = filename[3:]  # Remove 'js/' prefix
-                if os.path.exists(os.path.join('static/js', js_file)):
+        # Debug the request
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Request origin: {request.headers.get('Origin')}")
+        print(f"Request host: {request.headers.get('Host')}")
+        
+        # List all paths we're going to check
+        paths_to_check = [
+            os.path.join('static', filename),
+            os.path.join('static/js', filename if not filename.startswith('js/') else filename[3:]),
+            os.path.join('static/css', filename if not filename.startswith('css/') else filename[4:]),
+            os.path.join('backend/static', filename),
+            os.path.join('backend/static/js', filename if not filename.startswith('js/') else filename[3:]),
+            os.path.join('backend/static/css', filename if not filename.startswith('css/') else filename[4:])
+        ]
+        
+        print(f"Paths to check: {paths_to_check}")
+        
+        # Check if the file exists in any of our paths
+        for path in paths_to_check:
+            if os.path.exists(path):
+                print(f"File found at: {path}")
+                dir_path, file_name = os.path.split(path)
+                return send_from_directory(dir_path, file_name, headers=headers)
+                
+        # If we get here, file was not found
+        print(f"File not found: {filename}")
+        print(f"Static dir contents: {os.listdir('static')}")
+        if os.path.exists('static/js'):
+            print(f"JS dir contents: {os.listdir('static/js')}")
+        if os.path.exists('static/css'):
+            print(f"CSS dir contents: {os.listdir('static/css')}")
+            
+        # Last resort fallback: check if a file with a similar name exists
+        js_files = os.listdir('static/js') if os.path.exists('static/js') else []
+        css_files = os.listdir('static/css') if os.path.exists('static/css') else []
+        
+        # Check for similar filenames (files with same prefix)
+        if filename.startswith('js/'):
+            basename = os.path.basename(filename)
+            base_prefix = '.'.join(basename.split('.')[:2])  # e.g., main.4f93416e from main.4f93416e.js
+            for js_file in js_files:
+                if js_file.startswith(base_prefix):
+                    print(f"Found similar JS file: {js_file}")
                     return send_from_directory('static/js', js_file, headers=headers)
-                
-            # Second try: handle css/filename.css pattern
-            elif filename.startswith('css/'):
-                css_file = filename[4:]  # Remove 'css/' prefix
-                if os.path.exists(os.path.join('static/css', css_file)):
-                    return send_from_directory('static/css', css_file, headers=headers)
                     
-            # Direct path: try to find the file directly in static directory
-            elif os.path.exists(os.path.join('static', filename)):
-                return send_from_directory('static', filename, headers=headers)
-                
-            # Try subdirectories if not found directly
-            if os.path.exists(os.path.join('static/js', filename)):
-                return send_from_directory('static/js', filename, headers=headers)
-            elif os.path.exists(os.path.join('static/css', filename)):
-                return send_from_directory('static/css', filename, headers=headers)
-                
-            # If we get here, file was not found
-            print(f"File not found: {filename}")
-            print(f"Tried paths: static/{filename}, static/js/{filename}, static/css/{filename}")
-            print(f"Static dir contents: {os.listdir('static')}")
-            if os.path.exists('static/js'):
-                print(f"JS dir contents: {os.listdir('static/js')}")
-            if os.path.exists('static/css'):
-                print(f"CSS dir contents: {os.listdir('static/css')}")
-                
-            return jsonify({"error": "File not found"}), 404
-                
-        except Exception as inner_e:
-            print(f"Error in file lookup: {str(inner_e)}")
-            traceback.print_exc()
-            return jsonify({"error": str(inner_e)}), 500
+        elif filename.startswith('css/'):
+            basename = os.path.basename(filename)
+            base_prefix = '.'.join(basename.split('.')[:2])  # e.g., main.42f26821 from main.42f26821.css
+            for css_file in css_files:
+                if css_file.startswith(base_prefix):
+                    print(f"Found similar CSS file: {css_file}")
+                    return send_from_directory('static/css', css_file, headers=headers)
+            
+        return jsonify({"error": "File not found"}), 404
             
     except Exception as e:
         print(f"Error serving static file {filename}: {str(e)}")
@@ -361,12 +376,18 @@ def test():
         templates_contents = safe_listdir('templates')
         backend_static_contents = safe_listdir('backend/static')
         
+        # Check js and css subdirectories
+        js_contents = safe_listdir('static/js')
+        css_contents = safe_listdir('static/css')
+        
         return jsonify({
             'status': 'Backend server is running',
             'python_version': sys.version,
             'current_directory': current_dir,
             'directory_contents': dir_contents,
             'static_directory_contents': static_contents,
+            'static_js_contents': js_contents,
+            'static_css_contents': css_contents,
             'templates_directory_contents': templates_contents,
             'backend_static_contents': backend_static_contents,
             'env_variables': {k: v for k, v in os.environ.items() if not k.startswith('AWS') and not k.startswith('SECRET')}
