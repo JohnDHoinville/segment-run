@@ -90,19 +90,39 @@ def serve_static(filename):
         print(f"Requested file: {filename}")
         print(f"Current working directory: {os.getcwd()}")
         
-        # Default CORS headers - set to allow the current host
+        # Set CORS headers to allow all origins
         headers = {
-            'Access-Control-Allow-Origin': '*',  # Set to wildcard to ensure it works
+            'Access-Control-Allow-Origin': '*',  # This is crucial
             'Access-Control-Allow-Credentials': 'true',
-            'Vary': 'Origin',
-            'Cache-Control': 'public, max-age=31536000'
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
         }
         
         # Debug the request
+        print(f"Request path: {request.path}")
+        print(f"Request full URL: {request.url}")
         print(f"Request headers: {dict(request.headers)}")
-        print(f"Request origin: {request.headers.get('Origin')}")
-        print(f"Request host: {request.headers.get('Host')}")
         
+        # Add content type based on file extension
+        if filename.endswith('.js'):
+            print(f"Setting Content-Type for JS file")
+            headers['Content-Type'] = 'application/javascript'
+        elif filename.endswith('.css'):
+            print(f"Setting Content-Type for CSS file")
+            headers['Content-Type'] = 'text/css'
+        elif filename.endswith('.png'):
+            headers['Content-Type'] = 'image/png'
+        elif filename.endswith('.svg'):
+            headers['Content-Type'] = 'image/svg+xml'
+            
+        # Special case for the JS and CSS files we're having issues with
+        if filename == 'js/main.4f93416e.js':
+            return serve_main_js()
+        elif filename == 'css/main.42f26821.css':
+            return serve_main_css()
+        elif filename == 'js/488.7dee82e4.chunk.js':
+            return serve_chunk_js()
+            
         # List all paths we're going to check
         paths_to_check = [
             os.path.join('static', filename),
@@ -120,6 +140,7 @@ def serve_static(filename):
             if os.path.exists(path):
                 print(f"File found at: {path}")
                 dir_path, file_name = os.path.split(path)
+                print(f"Serving {file_name} from {dir_path} with headers: {headers}")
                 return send_from_directory(dir_path, file_name, headers=headers)
                 
         # If we get here, file was not found
@@ -130,28 +151,23 @@ def serve_static(filename):
         if os.path.exists('static/css'):
             print(f"CSS dir contents: {os.listdir('static/css')}")
             
-        # Last resort fallback: check if a file with a similar name exists
+        # As a last resort, try to find a file with a similar name
+        print("Checking for files with similar names...")
         js_files = os.listdir('static/js') if os.path.exists('static/js') else []
         css_files = os.listdir('static/css') if os.path.exists('static/css') else []
         
-        # Check for similar filenames (files with same prefix)
-        if filename.startswith('js/'):
-            basename = os.path.basename(filename)
-            base_prefix = '.'.join(basename.split('.')[:2])  # e.g., main.4f93416e from main.4f93416e.js
-            for js_file in js_files:
-                if js_file.startswith(base_prefix):
-                    print(f"Found similar JS file: {js_file}")
-                    return send_from_directory('static/js', js_file, headers=headers)
-                    
-        elif filename.startswith('css/'):
-            basename = os.path.basename(filename)
-            base_prefix = '.'.join(basename.split('.')[:2])  # e.g., main.42f26821 from main.42f26821.css
-            for css_file in css_files:
-                if css_file.startswith(base_prefix):
-                    print(f"Found similar CSS file: {css_file}")
-                    return send_from_directory('static/css', css_file, headers=headers)
-            
-        return jsonify({"error": "File not found"}), 404
+        # Log all JS and CSS files we have
+        print(f"All JS files: {js_files}")
+        print(f"All CSS files: {css_files}")
+        
+        # Return a 404 with helpful error info
+        return jsonify({
+            "error": "File not found", 
+            "file": filename,
+            "paths_checked": paths_to_check,
+            "available_js": js_files,
+            "available_css": css_files
+        }), 404
             
     except Exception as e:
         print(f"Error serving static file {filename}: {str(e)}")
@@ -677,6 +693,92 @@ def handle_react_static_files():
             response='',
             status=204
         )
+
+# Explicit routes for the specific static files
+@app.route('/static/js/main.4f93416e.js')
+def serve_main_js():
+    try:
+        js_file = 'main.4f93416e.js'
+        print(f"Direct serving {js_file}")
+        
+        # Set CORS headers for JS file
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': 'true',
+            'Content-Type': 'application/javascript',
+            'Cache-Control': 'public, max-age=31536000'
+        }
+        
+        # Check multiple locations
+        if os.path.exists(os.path.join('static/js', js_file)):
+            return send_from_directory('static/js', js_file, headers=headers)
+        elif os.path.exists(os.path.join('backend/static/js', js_file)):
+            return send_from_directory('backend/static/js', js_file, headers=headers)
+        else:
+            print(f"Main JS file not found: {js_file}")
+            print(f"Current directory: {os.getcwd()}")
+            print(f"Static/js contents: {os.listdir('static/js') if os.path.exists('static/js') else 'directory not found'}")
+            return jsonify({"error": "Main JS file not found"}), 404
+    except Exception as e:
+        print(f"Error serving main JS file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/static/css/main.42f26821.css')
+def serve_main_css():
+    try:
+        css_file = 'main.42f26821.css'
+        print(f"Direct serving {css_file}")
+        
+        # Set CORS headers for CSS file
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': 'true',
+            'Content-Type': 'text/css',
+            'Cache-Control': 'public, max-age=31536000'
+        }
+        
+        # Check multiple locations
+        if os.path.exists(os.path.join('static/css', css_file)):
+            return send_from_directory('static/css', css_file, headers=headers)
+        elif os.path.exists(os.path.join('backend/static/css', css_file)):
+            return send_from_directory('backend/static/css', css_file, headers=headers)
+        else:
+            print(f"Main CSS file not found: {css_file}")
+            print(f"Current directory: {os.getcwd()}")
+            print(f"Static/css contents: {os.listdir('static/css') if os.path.exists('static/css') else 'directory not found'}")
+            return jsonify({"error": "Main CSS file not found"}), 404
+    except Exception as e:
+        print(f"Error serving main CSS file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/static/js/488.7dee82e4.chunk.js')
+def serve_chunk_js():
+    try:
+        js_file = '488.7dee82e4.chunk.js'
+        print(f"Direct serving {js_file}")
+        
+        # Set CORS headers for JS file
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': 'true',
+            'Content-Type': 'application/javascript',
+            'Cache-Control': 'public, max-age=31536000'
+        }
+        
+        # Check multiple locations
+        if os.path.exists(os.path.join('static/js', js_file)):
+            return send_from_directory('static/js', js_file, headers=headers)
+        elif os.path.exists(os.path.join('backend/static/js', js_file)):
+            return send_from_directory('backend/static/js', js_file, headers=headers)
+        else:
+            print(f"Chunk JS file not found: {js_file}")
+            return jsonify({"error": "Chunk JS file not found"}), 404
+    except Exception as e:
+        print(f"Error serving chunk JS file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
