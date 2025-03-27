@@ -82,18 +82,41 @@ def serve_static(path):
     print(f"\n=== Static File Request ===")
     print(f"Requested path: {path}")
     print(f"Current working directory: {os.getcwd()}")
-    print(f"Static directory: /app/build/static")
-    print(f"Full path to file: {os.path.join('/app/build/static', path)}")
-    print(f"Directory exists: {os.path.exists('/app/build/static')}")
-    print(f"File exists: {os.path.exists(os.path.join('/app/build/static', path))}")
-    print("========================\n")
     
     try:
-        if os.path.exists(os.path.join('/app/build/static', path)):
-            print(f"Serving file from /app/build/static")
-            return send_from_directory('/app/build/static', path)
+        # Determine the correct MIME type based on file extension
+        mime_type = None
+        if path.endswith('.css'):
+            mime_type = 'text/css'
+        elif path.endswith('.js'):
+            mime_type = 'application/javascript'
+        elif path.endswith('.png'):
+            mime_type = 'image/png'
+        elif path.endswith('.jpg') or path.endswith('.jpeg'):
+            mime_type = 'image/jpeg'
+        elif path.endswith('.svg'):
+            mime_type = 'image/svg+xml'
+        elif path.endswith('.ico'):
+            mime_type = 'image/x-icon'
+        elif path.endswith('.json'):
+            mime_type = 'application/json'
+        elif path.endswith('.map'):
+            mime_type = 'application/json'
+            
+        static_dir = '/app/build/static'
+        full_path = os.path.join(static_dir, path)
+        
+        print(f"Static directory: {static_dir}")
+        print(f"Full path to file: {full_path}")
+        print(f"Directory exists: {os.path.exists(static_dir)}")
+        print(f"File exists: {os.path.exists(full_path)}")
+        print(f"MIME type: {mime_type}")
+        
+        if os.path.exists(full_path):
+            print(f"Serving file from {static_dir}")
+            return send_from_directory(static_dir, path, mimetype=mime_type)
         else:
-            print(f"File not found: {os.path.join('/app/build/static', path)}")
+            print(f"File not found: {full_path}")
             return f"File not found: {path}", 404
     except Exception as e:
         print(f"Error serving static file: {str(e)}")
@@ -107,11 +130,6 @@ def serve(path):
     print(f"\n=== React App Request ===")
     print(f"Requested path: {path}")
     print(f"Current working directory: {os.getcwd()}")
-    print(f"Build directory: /app/build")
-    print(f"Full path to file: {os.path.join('/app/build', path)}")
-    print(f"Directory exists: {os.path.exists('/app/build')}")
-    print(f"File exists: {os.path.exists(os.path.join('/app/build', path))}")
-    print("========================\n")
     
     try:
         # First check if it's a static file request
@@ -120,13 +138,21 @@ def serve(path):
             return serve_static(static_path)
         
         # Then check if it's a direct file request
-        if path and os.path.exists(os.path.join('/app/build', path)) and os.path.isfile(os.path.join('/app/build', path)):
+        build_dir = '/app/build'
+        file_path = os.path.join(build_dir, path)
+        
+        print(f"Build directory: {build_dir}")
+        print(f"Full path to file: {file_path}")
+        print(f"Directory exists: {os.path.exists(build_dir)}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        
+        if path and os.path.exists(file_path) and os.path.isfile(file_path):
             print(f"Serving file: {path}")
-            return send_from_directory('/app/build', path)
+            return send_from_directory(build_dir, path)
         
         # Finally, serve index.html for all other routes
         print("Serving index.html")
-        return send_from_directory('/app/build', 'index.html')
+        return send_from_directory(build_dir, 'index.html')
     except Exception as e:
         print(f"Error serving file: {str(e)}")
         traceback.print_exc()
