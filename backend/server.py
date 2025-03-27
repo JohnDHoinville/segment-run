@@ -79,6 +79,8 @@ def serve_static(path):
     try:
         # Check if the file exists in the static directory
         static_path = os.path.join('/app/build/static', path)
+        print(f"Looking for file at: {static_path}")
+        print(f"File exists: {os.path.exists(static_path)}")
         if os.path.exists(static_path):
             print(f"Serving file from {static_path}")
             return send_from_directory('/app/build/static', path)
