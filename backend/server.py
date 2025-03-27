@@ -475,6 +475,19 @@ def save_profile():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+# Handle favicon.ico requests to prevent 404/500 errors
+@app.route('/favicon.ico')
+def favicon():
+    try:
+        return send_from_directory('static', 'favicon.ico')
+    except:
+        # Return an empty response if favicon doesn't exist
+        response = app.response_class(
+            response='',
+            status=204,
+        )
+        return response
+
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
     app.run(
