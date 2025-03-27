@@ -195,7 +195,30 @@ def serve(path):
 
 @app.route('/test', methods=['GET'])
 def test():
-    return jsonify({'status': 'Backend server is running'}), 200
+    try:
+        import os
+        current_dir = os.getcwd()
+        dir_contents = os.listdir(current_dir)
+        build_dir = os.path.join(current_dir, 'build')
+        build_contents = os.listdir(build_dir) if os.path.exists(build_dir) else []
+        static_dir = os.path.join(build_dir, 'static')
+        static_contents = os.listdir(static_dir) if os.path.exists(static_dir) else []
+        
+        return jsonify({
+            'status': 'Backend server is running',
+            'current_directory': current_dir,
+            'directory_contents': dir_contents,
+            'build_directory': build_dir,
+            'build_contents': build_contents,
+            'static_directory': static_dir,
+            'static_contents': static_contents
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'Error',
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
 
 @app.route('/analyze', methods=['POST'])
 @login_required
