@@ -114,7 +114,10 @@ def serve_static(path):
         
         if os.path.exists(full_path):
             print(f"Serving file from {static_dir}")
-            return send_from_directory(static_dir, path, mimetype=mime_type)
+            response = send_from_directory(static_dir, path, mimetype=mime_type)
+            # Add cache control headers
+            response.headers['Cache-Control'] = 'public, max-age=31536000'
+            return response
         else:
             print(f"File not found: {full_path}")
             return f"File not found: {path}", 404
@@ -148,11 +151,20 @@ def serve(path):
         
         if path and os.path.exists(file_path) and os.path.isfile(file_path):
             print(f"Serving file: {path}")
-            return send_from_directory(build_dir, path)
+            response = send_from_directory(build_dir, path)
+            # Add cache control headers for static assets
+            if path.endswith(('.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.ico')):
+                response.headers['Cache-Control'] = 'public, max-age=31536000'
+            return response
         
         # Finally, serve index.html for all other routes
         print("Serving index.html")
-        return send_from_directory(build_dir, 'index.html')
+        response = send_from_directory(build_dir, 'index.html')
+        # Don't cache index.html
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     except Exception as e:
         print(f"Error serving file: {str(e)}")
         traceback.print_exc()
