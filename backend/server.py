@@ -94,35 +94,35 @@ def serve_static(filename):
         print(f"Requested file: {filename}")
         print(f"Current working directory: {os.getcwd()}")
         
-        # Set CORS headers based on the request origin
-        response = None
-        origin = request.headers.get('Origin')
+        # Get request origin
+        origin = request.headers.get('Origin', '')
         allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
         
-        # Try both locations
-        if os.path.exists(os.path.join('build/static', filename)):
-            response = send_from_directory('build/static', filename)
-        elif os.path.exists(os.path.join('static', filename)):
+        # Try to serve from the static directory which exists (from test output)
+        if os.path.exists(os.path.join('static', filename)):
             response = send_from_directory('static', filename)
         else:
-            print(f"File not found in either location: {filename}")
+            print(f"File not found: {filename}")
             return jsonify({"error": "File not found"}), 404
             
-        # Set CORS headers
+        # Set CORS headers for all responses
         if origin in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
+            # Default to the production domain
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Vary'] = 'Origin'
         
-        # Set cache control headers
-        if filename.endswith(('.js', '.css')):
-            response.headers['Cache-Control'] = 'public, max-age=31536000'
-            if filename.endswith('.js'):
-                response.headers['Content-Type'] = 'application/javascript'
-            elif filename.endswith('.css'):
-                response.headers['Content-Type'] = 'text/css'
+        # Set content type headers
+        if filename.endswith('.js'):
+            response.headers['Content-Type'] = 'application/javascript'
+        elif filename.endswith('.css'):
+            response.headers['Content-Type'] = 'text/css'
+        
+        # Add caching headers
+        response.headers['Cache-Control'] = 'public, max-age=31536000'
                 
         return response
         
@@ -138,53 +138,38 @@ def serve(path):
     print(f"\n=== React App Request ===")
     print(f"Requested path: {path}")
     print(f"Current working directory: {os.getcwd()}")
-    print(f"Request headers: {dict(request.headers)}")
     
     try:
-        # Get origin and set CORS headers
-        origin = request.headers.get('Origin')
+        # Get origin for CORS
+        origin = request.headers.get('Origin', '')
         allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
         
-        # First check if it's a static file request
+        # Handle static file requests
         if path.startswith('static/'):
             static_path = path[7:]  # Remove 'static/' prefix
             return serve_static(static_path)
         
-        # Then check if it's a direct file request
-        build_dir = 'build'
-        file_path = os.path.join(build_dir, path)
-        
-        print(f"Build directory: {build_dir}")
-        print(f"Full path to file: {file_path}")
-        print(f"Directory exists: {os.path.exists(build_dir)}")
-        print(f"File exists: {os.path.exists(file_path)}")
-        
+        # For all other routes, serve index.html
         response = None
-        if path and os.path.exists(file_path) and os.path.isfile(file_path):
-            print(f"Serving file: {path}")
-            response = send_from_directory(build_dir, path)
-            # Add cache control headers for static assets
-            if path.endswith(('.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.ico')):
-                response.headers['Cache-Control'] = 'public, max-age=31536000'
-                # Ensure correct content type for JavaScript files
-                if path.endswith('.js'):
-                    response.headers['Content-Type'] = 'application/javascript'
+        if os.path.exists('templates/index.html'):
+            response = send_from_directory('templates', 'index.html')
         else:
-            # Finally, serve index.html for all other routes
-            print("Serving index.html")
-            response = send_from_directory(build_dir, 'index.html')
-            # Don't cache index.html
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
+            # Fallback location
+            return jsonify({"error": "index.html not found"}), 404
         
         # Set CORS headers
         if origin in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+        
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Vary'] = 'Origin'
+        
+        # Don't cache index.html
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
         
         return response
         
