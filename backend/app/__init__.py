@@ -11,7 +11,7 @@ def create_app():
     
     # Configure CORS
     CORS(app,
-        origins=["http://localhost:3000"],
+        origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
         methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
         supports_credentials=True
