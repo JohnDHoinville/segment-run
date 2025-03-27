@@ -141,6 +141,10 @@ def serve(path):
     print(f"Request headers: {dict(request.headers)}")
     
     try:
+        # Get origin and set CORS headers
+        origin = request.headers.get('Origin')
+        allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        
         # First check if it's a static file request
         if path.startswith('static/'):
             static_path = path[7:]  # Remove 'static/' prefix
@@ -155,6 +159,7 @@ def serve(path):
         print(f"Directory exists: {os.path.exists(build_dir)}")
         print(f"File exists: {os.path.exists(file_path)}")
         
+        response = None
         if path and os.path.exists(file_path) and os.path.isfile(file_path):
             print(f"Serving file: {path}")
             response = send_from_directory(build_dir, path)
@@ -164,16 +169,25 @@ def serve(path):
                 # Ensure correct content type for JavaScript files
                 if path.endswith('.js'):
                     response.headers['Content-Type'] = 'application/javascript'
-            return response
+        else:
+            # Finally, serve index.html for all other routes
+            print("Serving index.html")
+            response = send_from_directory(build_dir, 'index.html')
+            # Don't cache index.html
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
         
-        # Finally, serve index.html for all other routes
-        print("Serving index.html")
-        response = send_from_directory(build_dir, 'index.html')
-        # Don't cache index.html
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
+        # Set CORS headers
+        if origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
+        
         return response
+        
     except Exception as e:
         print(f"Error serving file: {str(e)}")
         traceback.print_exc()
