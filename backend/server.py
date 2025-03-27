@@ -66,14 +66,20 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Serve static files
+@app.route('/static/<path:path>')
+def serve_static(path):
+    return send_from_directory('/app/build/static', path)
+
 # Serve React App
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    if path != "" and os.path.exists(os.path.join('/app/build', path)):
+    if path.startswith('static/'):
         return send_from_directory('/app/build', path)
-    else:
-        return send_from_directory('/app/build', 'index.html')
+    elif path != "" and os.path.exists(os.path.join('/app/build', path)):
+        return send_from_directory('/app/build', path)
+    return send_from_directory('/app/build', 'index.html')
 
 @app.route('/test', methods=['GET'])
 def test():
