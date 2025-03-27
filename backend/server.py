@@ -70,10 +70,10 @@ def login_required(f):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    if path != "" and os.path.exists(os.path.join('../build', path)):
-        return send_from_directory('../build', path)
+    if path != "" and os.path.exists(os.path.join('/app/build', path)):
+        return send_from_directory('/app/build', path)
     else:
-        return send_from_directory('../build', 'index.html')
+        return send_from_directory('/app/build', 'index.html')
 
 @app.route('/test', methods=['GET'])
 def test():
