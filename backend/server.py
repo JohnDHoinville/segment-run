@@ -844,12 +844,15 @@ def serve_main_css():
 @app.route('/static/js/488.7dee82e4.chunk.js')
 def serve_chunk_js():
     try:
-        js_file = '488.7dee82e4.chunk.js'
-        print(f"Direct serving {js_file}")
+        print("\n=== Serving Chunk JS ===")
+        print(f"Request method: {request.method}")
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Current working directory: {os.getcwd()}")
         
         # Set CORS headers for JS file
         origin = request.headers.get('Origin', '')
         allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
+        print(f"Request origin: {origin}")
         
         # Set proper CORS headers
         headers = {
@@ -860,18 +863,39 @@ def serve_chunk_js():
         
         if origin in allowed_origins:
             headers['Access-Control-Allow-Origin'] = origin
+            print(f"Using origin from request: {origin}")
         else:
             headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            print("Using default origin: https://gpx4u.com")
             
         headers['Access-Control-Allow-Credentials'] = 'true'
+        print(f"Final headers: {headers}")
         
         # Use the correct Heroku path
         file_path = '/app/backend/static/js/488.7dee82e4.chunk.js'
+        print(f"Checking file path: {file_path}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        
         if os.path.exists(file_path):
             print(f"Found file at: {file_path}")
-            return send_from_directory('/app/backend/static/js', js_file, headers=headers)
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/javascript'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                print(f"Successfully created response")
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
             
-        print(f"Chunk JS file not found: {js_file}")
+        print(f"Chunk JS file not found: {file_path}")
         return jsonify({"error": "Chunk JS file not found"}), 404
     except Exception as e:
         print(f"Error serving chunk JS file: {str(e)}")
@@ -1154,6 +1178,162 @@ def register():
             
         error_response.headers['Access-Control-Allow-Credentials'] = 'true'
         return error_response, 500
+
+@app.route('/static/js/main.b0c022b1.js.map')
+def serve_main_js_map():
+    try:
+        print("\n=== Serving Main JS Map ===")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        # Set CORS headers
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
+        
+        # Set proper CORS headers
+        headers = {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
+        }
+        
+        if origin in allowed_origins:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/js/main.b0c022b1.js.map'
+        
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/json'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
+            
+        print(f"Main JS map file not found: {file_path}")
+        return jsonify({"error": "Main JS map file not found"}), 404
+    except Exception as e:
+        print(f"Error serving main JS map file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/static/css/main.42f26821.css.map')
+def serve_main_css_map():
+    try:
+        print("\n=== Serving Main CSS Map ===")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        # Set CORS headers
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
+        
+        # Set proper CORS headers
+        headers = {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
+        }
+        
+        if origin in allowed_origins:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/css/main.42f26821.css.map'
+        
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/json'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
+            
+        print(f"Main CSS map file not found: {file_path}")
+        return jsonify({"error": "Main CSS map file not found"}), 404
+    except Exception as e:
+        print(f"Error serving main CSS map file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/static/js/488.7dee82e4.chunk.js.map')
+def serve_chunk_js_map():
+    try:
+        print("\n=== Serving Chunk JS Map ===")
+        print(f"Current working directory: {os.getcwd()}")
+        
+        # Set CORS headers
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com", "http://localhost:3000"]
+        
+        # Set proper CORS headers
+        headers = {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
+        }
+        
+        if origin in allowed_origins:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        # Use the correct Heroku path
+        file_path = '/app/backend/static/js/488.7dee82e4.chunk.js.map'
+        
+        if os.path.exists(file_path):
+            print(f"Found file at: {file_path}")
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                response = app.response_class(
+                    response=content,
+                    status=200,
+                    mimetype='application/json'
+                )
+                for key, value in headers.items():
+                    response.headers[key] = value
+                return response
+            except Exception as inner_e:
+                print(f"Error creating response: {str(inner_e)}")
+                traceback.print_exc()
+                raise
+            
+        print(f"Chunk JS map file not found: {file_path}")
+        return jsonify({"error": "Chunk JS map file not found"}), 404
+    except Exception as e:
+        print(f"Error serving chunk JS map file: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
