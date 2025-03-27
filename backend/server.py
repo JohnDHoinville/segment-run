@@ -87,82 +87,13 @@ def login_required(f):
     return decorated_function
 
 # Serve static files
-@app.route('/static/<path:path>')
-def serve_static(path):
-    print(f"\n=== Static File Request ===")
-    print(f"Requested path: {path}")
-    print(f"Current working directory: {os.getcwd()}")
-    print(f"Request headers: {dict(request.headers)}")
-    
+@app.route('/static/<path:filename>')
+def serve_static(filename):
     try:
-        # Determine the correct MIME type based on file extension
-        mime_type = None
-        if path.endswith('.css'):
-            mime_type = 'text/css'
-            static_type = 'css'
-        elif path.endswith('.js'):
-            mime_type = 'application/javascript'
-            static_type = 'js'
-        elif path.endswith('.map'):
-            mime_type = 'application/json'
-            static_type = path.split('.')[-2].split('/')[-1]  # Get type from the source file
-        else:
-            print(f"Unsupported file type: {path}")
-            return f"Unsupported file type: {path}", 404
-            
-        # Split the path into components and get the file name
-        path_parts = path.split('/')
-        file_name = path_parts[-1]
-        
-        # Determine the static type from the path
-        if 'js/' in path:
-            static_type = 'js'
-        elif 'css/' in path:
-            static_type = 'css'
-            
-        print(f"Path parts: {path_parts}")
-        print(f"File name: {file_name}")
-        print(f"Static type: {static_type}")
-        
-        # Construct the full path
-        static_dir = os.path.join('/app/build/static', static_type)
-        full_path = os.path.join(static_dir, file_name)
-        
-        print(f"Static directory: {static_dir}")
-        print(f"Full path: {full_path}")
-        print(f"Directory exists: {os.path.exists(static_dir)}")
-        print(f"File exists: {os.path.exists(full_path)}")
-        print(f"MIME type: {mime_type}")
-        print(f"Directory contents: {os.listdir(static_dir)}")
-        
-        if not os.path.exists(static_dir):
-            print(f"Static directory does not exist: {static_dir}")
-            return f"Static directory does not exist: {static_dir}", 404
-            
-        if not os.path.exists(full_path):
-            print(f"File not found: {full_path}")
-            return f"File not found: {full_path}", 404
-            
-        print(f"Serving file from {static_dir}")
-        response = send_from_directory(static_dir, file_name, mimetype=mime_type)
-        response.headers['Cache-Control'] = 'public, max-age=31536000'
-        
-        # Set CORS headers based on the request origin
-        origin = request.headers.get('Origin')
-        allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
-        if origin in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Vary'] = 'Origin'
-        else:
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            
-        response.headers['Content-Type'] = mime_type
-        return response
+        return send_from_directory('static', filename)
     except Exception as e:
-        print(f"Error serving static file: {str(e)}")
-        traceback.print_exc()
-        return str(e), 500
+        print(f"Error serving static file {filename}: {str(e)}")
+        return jsonify({"error": "File not found"}), 404
 
 # Serve React App
 @app.route('/', defaults={'path': ''})
