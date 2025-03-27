@@ -25,6 +25,11 @@ class DateTimeEncoder(JSONEncoder):
 load_dotenv('.flaskenv')
 
 print("Starting Flask server...")
+print(f"Current working directory: {os.getcwd()}")
+print(f"Contents of current directory: {os.listdir('.')}")
+print(f"Contents of /app directory: {os.listdir('/app')}")
+print(f"Contents of /app/build directory: {os.listdir('/app/build')}")
+print(f"Contents of /app/build/static directory: {os.listdir('/app/build/static')}")
 
 # Use the custom encoder for all JSON responses
 app.json_encoder = DateTimeEncoder
@@ -69,32 +74,46 @@ def login_required(f):
 # Serve static files
 @app.route('/static/<path:path>')
 def serve_static(path):
-    print(f"Attempting to serve static file: {path}")
-    static_path = os.path.join('/app/build/static', path)
-    print(f"Full static path: {static_path}")
-    print(f"File exists: {os.path.exists(static_path)}")
-    return send_from_directory('/app/build/static', path)
+    print(f"\nServing static file: {path}")
+    print(f"Current working directory: {os.getcwd()}")
+    try:
+        static_path = os.path.join('/app/build/static', path)
+        print(f"Full static path: {static_path}")
+        print(f"File exists: {os.path.exists(static_path)}")
+        print(f"Directory contents: {os.listdir(os.path.dirname(static_path))}")
+        return send_from_directory('/app/build/static', path)
+    except Exception as e:
+        print(f"Error serving static file: {str(e)}")
+        return str(e), 500
 
 # Serve React App
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    print(f"Serving path: {path}")
-    if path.startswith('static/'):
-        static_path = path[7:]  # Remove 'static/' prefix
-        print(f"Serving static file: {static_path}")
-        return send_from_directory('/app/build/static', static_path)
+    print(f"\nServing path: {path}")
+    print(f"Current working directory: {os.getcwd()}")
     
-    file_path = os.path.join('/app/build', path)
-    print(f"Checking file path: {file_path}")
-    print(f"File exists: {os.path.exists(file_path)}")
-    
-    if path and os.path.exists(file_path):
-        print(f"Serving file: {path}")
-        return send_from_directory('/app/build', path)
-    
-    print("Serving index.html")
-    return send_from_directory('/app/build', 'index.html')
+    try:
+        if path.startswith('static/'):
+            static_path = path[7:]  # Remove 'static/' prefix
+            print(f"Serving static file: {static_path}")
+            print(f"Static directory contents: {os.listdir('/app/build/static')}")
+            return send_from_directory('/app/build/static', static_path)
+        
+        file_path = os.path.join('/app/build', path)
+        print(f"Checking file path: {file_path}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        print(f"Build directory contents: {os.listdir('/app/build')}")
+        
+        if path and os.path.exists(file_path):
+            print(f"Serving file: {path}")
+            return send_from_directory('/app/build', path)
+        
+        print("Serving index.html")
+        return send_from_directory('/app/build', 'index.html')
+    except Exception as e:
+        print(f"Error serving file: {str(e)}")
+        return str(e), 500
 
 @app.route('/test', methods=['GET'])
 def test():
