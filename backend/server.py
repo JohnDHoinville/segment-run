@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
@@ -66,13 +66,18 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Serve React App
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path != "" and os.path.exists(os.path.join('../build', path)):
+        return send_from_directory('../build', path)
+    else:
+        return send_from_directory('../build', 'index.html')
+
 @app.route('/test', methods=['GET'])
 def test():
     return jsonify({'status': 'Backend server is running'}), 200
-
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({'message': 'Server is running'}), 200
 
 @app.route('/analyze', methods=['POST'])
 @login_required
