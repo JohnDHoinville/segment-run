@@ -84,31 +84,37 @@ def serve_static(path):
     print(f"Current working directory: {os.getcwd()}")
     
     try:
-        # Split the path into components
-        path_parts = path.split('/')
-        print(f"Path parts: {path_parts}")
-        
-        # The first part should be 'js' or 'css'
-        static_type = path_parts[0]
-        print(f"Static type: {static_type}")
-        
-        # The rest is the file path
-        file_path = '/'.join(path_parts[1:])
-        print(f"File path: {file_path}")
-        
         # Determine the correct MIME type based on file extension
         mime_type = None
         if path.endswith('.css'):
             mime_type = 'text/css'
+            static_type = 'css'
         elif path.endswith('.js'):
             mime_type = 'application/javascript'
+            static_type = 'js'
         elif path.endswith('.map'):
             mime_type = 'application/json'
+            static_type = path.split('.')[-2].split('/')[-1]  # Get type from the source file
+        else:
+            print(f"Unsupported file type: {path}")
+            return f"Unsupported file type: {path}", 404
+            
+        # Split the path into components
+        path_parts = path.split('/')
+        print(f"Path parts: {path_parts}")
+        
+        # Find the static type directory (js or css)
+        if static_type not in ['js', 'css']:
+            print(f"Invalid static type: {static_type}")
+            return f"Invalid static type: {static_type}", 404
             
         # Construct the full path
         static_dir = os.path.join('/app/build/static', static_type)
+        file_path = path_parts[-1]  # Just use the filename
         full_path = os.path.join(static_dir, file_path)
         
+        print(f"Static type: {static_type}")
+        print(f"File path: {file_path}")
         print(f"Static directory: {static_dir}")
         print(f"Full path: {full_path}")
         print(f"Directory exists: {os.path.exists(static_dir)}")
