@@ -1822,14 +1822,14 @@ function App() {
         <h2>Run History</h2>
         {runs.length > 0 && console.log('Run data sample:', runs[0])}
         <div className="history-controls">
-          <button 
+            <button 
             className="compare-button" 
             disabled={selectedRuns.length < 2}
             onClick={() => onCompareRuns(selectedRuns)}
-          >
+            >
             Compare Selected Runs
-          </button>
-        </div>
+            </button>
+          </div>
         <div className="table-container">
           <table className="history-table">
             <thead>
@@ -2001,7 +2001,7 @@ function App() {
                             }
                           })()}
                         </span>
-                      </div>
+        </div>
                     </td>
                     <td>
                       <div className="action-buttons">
@@ -2056,9 +2056,9 @@ function App() {
             </tbody>
           </table>
         </div>
-      </div>
-    );
-  };
+    </div>
+  );
+};
 
   const RunComparison = ({ runs, onClose }) => {
     if (!runs || runs.length !== 2) {
@@ -2130,7 +2130,7 @@ function App() {
 
     console.log('Calculated distances:', { run1Distance, run2Distance });
 
-    return (
+  return (
       <div className="run-comparison">
         <div className="comparison-header">
           <h2>Run Comparison</h2>
@@ -2325,7 +2325,7 @@ function App() {
   return (
     <ThemeProvider>
       <TableProvider>
-        <div className="App">
+    <div className="App">
           {loading && <LoadingSpinner />}
           {error && <ErrorMessage message={error} />}
           
@@ -2532,7 +2532,7 @@ function App() {
                               <p className="no-splits-explanation">
                                 Mile splits are generated during analysis and may not be available for all runs.
                               </p>
-                            </div>
+    </div>
                           );
                         }
                       })()}
