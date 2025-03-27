@@ -83,7 +83,13 @@ def serve_static(path):
         print(f"File exists: {os.path.exists(static_path)}")
         if os.path.exists(static_path):
             print(f"Serving file from {static_path}")
-            return send_from_directory('/app/build/static', path)
+            # Set the correct MIME type based on file extension
+            if path.endswith('.css'):
+                return send_from_directory('/app/build/static', path, mimetype='text/css')
+            elif path.endswith('.js'):
+                return send_from_directory('/app/build/static', path, mimetype='application/javascript')
+            else:
+                return send_from_directory('/app/build/static', path)
         else:
             print(f"File not found: {static_path}")
             return f"File not found: {path}", 404
@@ -103,7 +109,13 @@ def serve(path):
         if path.startswith('static/'):
             static_path = path[7:]  # Remove 'static/' prefix
             print(f"Serving static file: {static_path}")
-            return send_from_directory('/app/build/static', static_path)
+            # Set the correct MIME type based on file extension
+            if static_path.endswith('.css'):
+                return send_from_directory('/app/build/static', static_path, mimetype='text/css')
+            elif static_path.endswith('.js'):
+                return send_from_directory('/app/build/static', static_path, mimetype='application/javascript')
+            else:
+                return send_from_directory('/app/build/static', static_path)
         
         # Then check if it's a direct file request
         file_path = os.path.join('/app/build', path)
