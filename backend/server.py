@@ -26,10 +26,6 @@ load_dotenv('.flaskenv')
 
 print("Starting Flask server...")
 print(f"Current working directory: {os.getcwd()}")
-print(f"Contents of current directory: {os.listdir('.')}")
-print(f"Contents of /app directory: {os.listdir('/app')}")
-print(f"Contents of /app/build directory: {os.listdir('/app/build')}")
-print(f"Contents of /app/build/static directory: {os.listdir('/app/build/static')}")
 
 # Use the custom encoder for all JSON responses
 app.json_encoder = DateTimeEncoder
@@ -135,11 +131,11 @@ def serve_static(filename):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    print(f"\n=== React App Request ===")
-    print(f"Requested path: {path}")
-    print(f"Current working directory: {os.getcwd()}")
-    
     try:
+        print(f"\n=== React App Request ===")
+        print(f"Requested path: {path}")
+        print(f"Current working directory: {os.getcwd()}")
+        
         # Get origin for CORS
         origin = request.headers.get('Origin', '')
         allowed_origins = ["http://localhost:3000", "https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
@@ -151,11 +147,44 @@ def serve(path):
         
         # For all other routes, serve index.html
         response = None
-        if os.path.exists('templates/index.html'):
-            response = send_from_directory('templates', 'index.html')
-        else:
-            # Fallback location
-            return jsonify({"error": "index.html not found"}), 404
+        
+        # Try multiple locations for index.html
+        possible_paths = [
+            os.path.join('templates', 'index.html'),
+            'index.html',
+            os.path.join('backend', 'templates', 'index.html'),
+            os.path.join('build', 'index.html')
+        ]
+        
+        for html_path in possible_paths:
+            if os.path.exists(html_path):
+                print(f"Found index.html at: {html_path}")
+                if '/' in html_path:
+                    dir_path, file_name = html_path.rsplit('/', 1)
+                    response = send_from_directory(dir_path, file_name)
+                else:
+                    response = send_from_directory('.', html_path)
+                break
+        
+        if response is None:
+            # If we still don't have a response, return a minimal HTML page
+            print("No index.html found, returning minimal HTML")
+            html = """
+            <!DOCTYPE html>
+            <html>
+            <head><title>GPX4U</title></head>
+            <body>
+                <h1>GPX4U</h1>
+                <p>Welcome to GPX4U. The application is currently being set up.</p>
+                <p>Please try again shortly or contact support if the issue persists.</p>
+            </body>
+            </html>
+            """
+            response = app.response_class(
+                response=html,
+                status=200,
+                mimetype='text/html'
+            )
         
         # Set CORS headers
         if origin in allowed_origins:
@@ -176,27 +205,56 @@ def serve(path):
     except Exception as e:
         print(f"Error serving file: {str(e)}")
         traceback.print_exc()
-        return str(e), 500
+        # Return a minimal error page instead of 500 error
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>GPX4U - Error</title></head>
+        <body>
+            <h1>GPX4U - Error</h1>
+            <p>An error occurred while loading the application.</p>
+            <p>Please try again shortly or contact support if the issue persists.</p>
+        </body>
+        </html>
+        """
+        response = app.response_class(
+            response=html,
+            status=200,
+            mimetype='text/html'
+        )
+        return response
 
 @app.route('/test', methods=['GET'])
 def test():
     try:
         import os
+        import sys
+        
+        # Get basic system info
         current_dir = os.getcwd()
         dir_contents = os.listdir(current_dir)
-        build_dir = os.path.join(current_dir, 'build')
-        build_contents = os.listdir(build_dir) if os.path.exists(build_dir) else []
-        static_dir = os.path.join(build_dir, 'static')
-        static_contents = os.listdir(static_dir) if os.path.exists(static_dir) else []
+        
+        # Safely get directory contents
+        def safe_listdir(path):
+            try:
+                return os.listdir(path) if os.path.exists(path) else []
+            except Exception as e:
+                return [f"Error: {str(e)}"]
+        
+        # Check various directories
+        static_contents = safe_listdir('static')
+        templates_contents = safe_listdir('templates')
+        backend_static_contents = safe_listdir('backend/static')
         
         return jsonify({
             'status': 'Backend server is running',
+            'python_version': sys.version,
             'current_directory': current_dir,
             'directory_contents': dir_contents,
-            'build_directory': build_dir,
-            'build_contents': build_contents,
-            'static_directory': static_dir,
-            'static_contents': static_contents
+            'static_directory_contents': static_contents,
+            'templates_directory_contents': templates_contents,
+            'backend_static_contents': backend_static_contents,
+            'env_variables': {k: v for k, v in os.environ.items() if not k.startswith('AWS') and not k.startswith('SECRET')}
         }), 200
     except Exception as e:
         return jsonify({
