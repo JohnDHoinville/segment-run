@@ -90,13 +90,22 @@ def serve_static(filename):
         print(f"Requested file: {filename}")
         print(f"Current working directory: {os.getcwd()}")
         
-        # Set CORS headers to allow all origins
+        # Get origin for CORS
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        
+        # Set CORS headers 
         headers = {
-            'Access-Control-Allow-Origin': '*',  # This is crucial
-            'Access-Control-Allow-Credentials': 'true',
             'Cache-Control': 'public, max-age=31536000',
             'Vary': 'Origin'
         }
+        
+        if origin in allowed_origins:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Debug the request
         print(f"Request path: {request.path}")
@@ -702,12 +711,22 @@ def serve_main_js():
         print(f"Direct serving {js_file}")
         
         # Set CORS headers for JS file
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        
+        # Set proper CORS headers
         headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': 'true',
             'Content-Type': 'application/javascript',
-            'Cache-Control': 'public, max-age=31536000'
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
         }
+        
+        if origin in allowed_origins:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Check multiple locations
         if os.path.exists(os.path.join('static/js', js_file)):
@@ -731,12 +750,22 @@ def serve_main_css():
         print(f"Direct serving {css_file}")
         
         # Set CORS headers for CSS file
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        
+        # Set proper CORS headers
         headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': 'true',
             'Content-Type': 'text/css',
-            'Cache-Control': 'public, max-age=31536000'
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
         }
+        
+        if origin in allowed_origins:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Check multiple locations
         if os.path.exists(os.path.join('static/css', css_file)):
@@ -760,12 +789,22 @@ def serve_chunk_js():
         print(f"Direct serving {js_file}")
         
         # Set CORS headers for JS file
+        origin = request.headers.get('Origin', '')
+        allowed_origins = ["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"]
+        
+        # Set proper CORS headers
         headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': 'true',
             'Content-Type': 'application/javascript',
-            'Cache-Control': 'public, max-age=31536000'
+            'Cache-Control': 'public, max-age=31536000',
+            'Vary': 'Origin'
         }
+        
+        if origin in allowed_origins:
+            headers['Access-Control-Allow-Origin'] = origin
+        else:
+            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+            
+        headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Check multiple locations
         if os.path.exists(os.path.join('static/js', js_file)):
