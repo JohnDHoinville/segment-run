@@ -36,10 +36,12 @@ def create_app():
     from .routes.runs import runs_bp
     from .routes.auth import auth_bp
     from .routes.profile import profile_bp
+    from .routes.healthcheck import health_bp
     
     app.register_blueprint(runs_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
+    app.register_blueprint(health_bp)
     
     return app
 
