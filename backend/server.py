@@ -2258,6 +2258,60 @@ def test_database_detail():
         
         return error_response, 500
 
+@app.route('/api/diagnostics', methods=['GET'])
+def diagnostics():
+    """Diagnostic endpoint to help troubleshoot static file serving issues."""
+    current_dir = os.getcwd()
+    
+    # Check static directories
+    static_paths = [
+        'static',
+        'static/js',
+        'static/css',
+        'backend/static',
+        'backend/static/js',
+        'backend/static/css',
+        'templates'
+    ]
+    
+    # Check existence of directories
+    dir_exists = {path: os.path.isdir(os.path.join(current_dir, path)) for path in static_paths}
+    
+    # List contents of directories that exist
+    dir_contents = {
+        path: os.listdir(os.path.join(current_dir, path)) 
+        for path in static_paths 
+        if os.path.isdir(os.path.join(current_dir, path))
+    }
+    
+    # Check index.html
+    index_path = os.path.join(current_dir, 'templates', 'index.html')
+    index_exists = os.path.isfile(index_path)
+    index_size = os.path.getsize(index_path) if index_exists else 0
+    
+    # Get Flask static folder config
+    static_folder = app.static_folder
+    static_url_path = app.static_url_path
+    
+    return jsonify({
+        'current_dir': current_dir,
+        'dir_exists': dir_exists,
+        'dir_contents': dir_contents,
+        'index_exists': index_exists, 
+        'index_size': index_size,
+        'flask_config': {
+            'static_folder': static_folder,
+            'static_url_path': static_url_path
+        },
+        'env_vars': {
+            'FLASK_ENV': os.environ.get('FLASK_ENV', 'not set'),
+            'FLASK_DEBUG': os.environ.get('FLASK_DEBUG', 'not set'),
+            'PORT': os.environ.get('PORT', 'not set'),
+            'RENDER_SERVICE_NAME': os.environ.get('RENDER_SERVICE_NAME', 'not set'),
+            'RENDER_EXTERNAL_URL': os.environ.get('RENDER_EXTERNAL_URL', 'not set')
+        }
+    })
+
 if __name__ == '__main__':
     # Get port from environment variable (default to 5001 if not set)
     port = int(os.environ.get('PORT', 5001))

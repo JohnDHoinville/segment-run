@@ -28,29 +28,19 @@ if parent_dir not in sys.path:
 print(f"Python path: {sys.path}")
 
 try:
-    # Import the Flask app
-    print("Importing Flask app...")
-    from app import app
+    # Import the server module instead of app directly
+    print("Importing server module...")
+    import server
+    
+    # Get the app from server
+    app = server.app
     
     # Force production mode settings
     app.config['ENV'] = 'production'
     app.config['DEBUG'] = False
     app.config['TESTING'] = False
     
-    # Simple test route
-    @app.route('/server-test')
-    def server_test():
-        return {
-            'status': 'ok',
-            'message': 'Server is running properly',
-            'environment': os.environ.get('FLASK_ENV', 'production'),
-            'render_service': os.environ.get('RENDER_SERVICE_NAME', 'unknown'),
-            'port': os.environ.get('PORT', 'unknown'),
-            'python_version': sys.version,
-            'directory': os.getcwd()
-        }
-    
-    # Root route is handled by server.py to serve the frontend
+    # Root route and static file handling is already defined in server.py
     
     if __name__ == '__main__':
         port = int(os.environ.get('PORT', 10000))
