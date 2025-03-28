@@ -510,8 +510,8 @@ def analyze():
         
         # Try to get the profile with a direct connection check
         try:
-        profile = db.get_profile(session['user_id'])
-        print("\nProfile data:", profile)
+            profile = db.get_profile(session['user_id'])
+            print("\nProfile data:", profile)
         except Exception as profile_error:
             print(f"Error getting profile: {str(profile_error)}")
             # Create default profile if fetch fails
