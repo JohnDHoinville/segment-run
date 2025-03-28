@@ -515,8 +515,8 @@ def analyze():
         
         # Try to get the profile with a direct connection check
         try:
-            profile = db.get_profile(session['user_id'])
-            print("\nProfile data:", profile)
+        profile = db.get_profile(session['user_id'])
+        print("\nProfile data:", profile)
         except Exception as profile_error:
             print(f"Error getting profile: {str(profile_error)}")
             # Create default profile if fetch fails
@@ -2259,10 +2259,26 @@ def test_database_detail():
         return error_response, 500
 
 if __name__ == '__main__':
-    print("Starting server on http://localhost:5001")
-    app.run(
-        debug=True,
-        host='localhost',
-        port=5001,
-        ssl_context=None
-    ) 
+    # Get port from environment variable (default to 5001 if not set)
+    port = int(os.environ.get('PORT', 5001))
+    
+    # Determine if we're in production based on environment variable
+    is_production = os.environ.get('RENDER', False) or os.environ.get('FLASK_ENV', '') == 'production'
+    
+    # Use appropriate settings based on environment
+    if is_production:
+        print(f"Starting production server on http://0.0.0.0:{port}")
+        app.run(
+            debug=False,
+            host='0.0.0.0',
+            port=port,
+            ssl_context=None
+        )
+    else:
+        print(f"Starting development server on http://localhost:{port}")
+        app.run(
+            debug=True,
+            host='localhost',
+            port=port,
+            ssl_context=None
+        ) 
