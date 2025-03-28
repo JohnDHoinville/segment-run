@@ -5,7 +5,7 @@ import os
 load_dotenv('.flaskenv')
 
 # Change relative import to absolute import 
-from server import app
+from app import app
 
 if __name__ == "__main__":
     # Get port from environment variable (default to 5001 if not set)
