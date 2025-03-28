@@ -196,7 +196,7 @@ class RunDatabase:
 
     def init_db(self):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection) and POSTGRES_AVAILABLE:
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL initialization
                 # First check if the tables already exist
                 self.cursor.execute("""
@@ -330,7 +330,7 @@ class RunDatabase:
 
     def ensure_tables(self):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection) and POSTGRES_AVAILABLE:
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL table check
                 self.cursor.execute("""
                     SELECT EXISTS (
