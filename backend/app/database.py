@@ -333,7 +333,7 @@ class RunDatabase:
                     )
                 """)
                 if not self.cursor.fetchone()[0]:
-                self.init_db()
+                    self.init_db()
             else:
                 # SQLite table check
                 self.cursor.execute("""
@@ -341,7 +341,7 @@ class RunDatabase:
                     WHERE type='table' AND name='users'
                 """)
                 if not self.cursor.fetchone():
-                self.init_db()
+                    self.init_db()
         except Exception as e:
             print(f"Error ensuring tables: {e}")
             self.conn.rollback()
@@ -630,7 +630,7 @@ class RunDatabase:
                 
                 # Convert to list of dictionaries with proper handling
                 result = []
-            for run in runs:
+                for run in runs:
                     try:
                         # Start with a basic dictionary conversion 
                         run_dict = dict(run)
@@ -641,7 +641,7 @@ class RunDatabase:
                             if isinstance(run_dict['data'], str):
                                 try:
                                     run_dict['data'] = json.loads(run_dict['data'])
-                        except json.JSONDecodeError:
+                                except json.JSONDecodeError:
                                     print(f"Failed to parse JSON data for run ID {run_dict.get('id')}")
                                     run_dict['data'] = {}
                             # If it's already a dict/object (from psycopg2), use as is
@@ -681,7 +681,7 @@ class RunDatabase:
         try:
             if isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
-            if user_id:
+                if user_id:
                     self.cursor.execute("""
                         SELECT * FROM runs 
                         WHERE id = %s AND user_id = %s
