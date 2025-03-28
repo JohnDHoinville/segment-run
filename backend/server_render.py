@@ -10,6 +10,9 @@ print(f"Current directory: {os.getcwd()}")
 print(f"Directory contents: {os.listdir('.')}")
 print(f"Environment: {os.environ.get('FLASK_ENV', 'not set')}")
 print(f"PORT: {os.environ.get('PORT', 'not set')}")
+print(f"RENDER SERVICE: {os.environ.get('RENDER_SERVICE_NAME', 'not set')}")
+print(f"RENDER EXTERNAL URL: {os.environ.get('RENDER_EXTERNAL_URL', 'not set')}")
+print(f"RENDER INTERNAL URL: {os.environ.get('RENDER_INTERNAL_URL', 'not set')}")
 print("=" * 50)
 
 # Make sure backend directory is in path

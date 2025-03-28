@@ -16,7 +16,8 @@ def create_app():
     
     # Configure CORS
     CORS(app,
-        origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
+        origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com",
+                "https://gpx4u.onrender.com", "https://*.onrender.com", "*"],
         methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
         supports_credentials=True
@@ -51,16 +52,24 @@ def create_app():
     # Add root route
     @app.route('/')
     def root():
+        render_external_url = os.environ.get('RENDER_EXTERNAL_URL', 'unknown')
+        service_name = os.environ.get('RENDER_SERVICE_NAME', 'gpx4u')
         return {
             'status': 'ok', 
             'message': 'GPX4U API server is running', 
             'version': '1.0.0',
+            'service_info': {
+                'name': service_name,
+                'public_url': render_external_url,
+                'environment': os.environ.get('FLASK_ENV', 'production')
+            },
             'endpoints': [
-                '/health', 
-                '/api/runs', 
-                '/api/profile',
-                '/api/login',
-                '/api/register'
+                f'{render_external_url}/health', 
+                f'{render_external_url}/server-test',
+                f'{render_external_url}/api/runs', 
+                f'{render_external_url}/api/profile',
+                f'{render_external_url}/api/login',
+                f'{render_external_url}/api/register'
             ]
         }
     
