@@ -39,21 +39,7 @@ try:
     def server_test():
         return {'status': 'ok', 'message': 'Server is running properly'}
     
-    # Add a root route if it doesn't exist
-    @app.route('/')
-    def root():
-        return {
-            'status': 'ok', 
-            'message': 'GPX4U API server is running', 
-            'endpoints': [
-                '/health', 
-                '/server-test', 
-                '/api/runs', 
-                '/api/profile',
-                '/api/login',
-                '/api/register'
-            ]
-        }
+    # Root route is already defined in app/__init__.py
     
     if __name__ == '__main__':
         port = int(os.environ.get('PORT', 10000))
