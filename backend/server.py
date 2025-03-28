@@ -6,7 +6,7 @@ import os
 from app.database import RunDatabase
 from app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from functools import wraps
 import secrets
@@ -59,7 +59,7 @@ def set_cors_headers(response):
 ALLOWED_ORIGINS = ['https://gpx4u.com', 'http://gpx4u.com', 'http://localhost:3000', 'http://localhost:5000', '*']
 
 # Set permanent session lifetime
-app.permanent_session_lifetime = datetime.timedelta(days=30)
+app.permanent_session_lifetime = timedelta(days=30)
 
 # Configure session
 app.config.update(
