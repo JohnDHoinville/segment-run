@@ -50,8 +50,8 @@ def create_app():
     app.register_blueprint(health_bp)
     
     # Add root route
-    @app.route('/')
-    def root():
+    @app.route('/api')
+    def api_info():
         render_external_url = os.environ.get('RENDER_EXTERNAL_URL', 'unknown')
         service_name = os.environ.get('RENDER_SERVICE_NAME', 'gpx4u')
         return {

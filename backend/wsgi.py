@@ -30,24 +30,24 @@ try:
         print(f"Error loading environment variables: {str(e)}")
         traceback.print_exc()
     
-    # Change relative import to absolute import 
-    print("Importing Flask app...")
+    # Import from server.py explicitly instead of app/__init__.py
+    print("Importing Flask app from server.py...")
     
     try:
-        from app import app
-        print("Successfully imported app")
+        from server import app
+        print("Successfully imported app from server.py")
     except ImportError:
         print("First import attempt failed, trying alternative import paths...")
         try:
-            from backend.app import app
-            print("Successfully imported app via backend.app")
+            from backend.server import app
+            print("Successfully imported app via backend.server")
         except ImportError:
             sys.path.insert(0, os.path.join(current_dir, 'app'))
             print(f"Updated path again: {sys.path[:5]}")
-            from app import app
+            from server import app
             print("Successfully imported app after path adjustment")
     except Exception as import_error:
-        print(f"Error importing app: {str(import_error)}")
+        print(f"Error importing app from server.py: {str(import_error)}")
         traceback.print_exc()
         raise
     

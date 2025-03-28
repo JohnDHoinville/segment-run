@@ -41,6 +41,7 @@ try:
     app.config['TESTING'] = False
     
     # Root route and static file handling is already defined in server.py
+    # DO NOT add additional routes here that would override server.py routes
     
     if __name__ == '__main__':
         port = int(os.environ.get('PORT', 10000))
@@ -48,12 +49,10 @@ try:
         # Explicitly set all production flags
         app.run(
             host='0.0.0.0', 
-            port=port, 
-            debug=False, 
-            use_reloader=False, 
-            threaded=True
+            port=port,
+            debug=False,
+            use_reloader=False  # Disable reloader in production
         )
 except Exception as e:
-    print(f"ERROR DURING SERVER STARTUP: {str(e)}")
-    traceback.print_exc()
-    sys.exit(1) 
+    print(f"ERROR DURING SERVER STARTUP: {str(e)} ({e.__class__.__name__}, line {e.__traceback__.tb_lineno if e.__traceback__ else 'unknown'})")
+    traceback.print_exc() 
