@@ -12,7 +12,13 @@ from functools import wraps
 import secrets
 import traceback
 from json import JSONEncoder
-from app import app
+try:
+    from app import app
+except ImportError:
+    # Create Flask app if not imported
+    app = Flask(__name__, 
+              static_folder='static',  # Update static folder path
+              static_url_path='/static')  # Update static URL path
 try:
     import psycopg2
     POSTGRES_AVAILABLE = True
@@ -33,6 +39,8 @@ load_dotenv('.flaskenv')
 
 print("Starting Flask server...")
 print(f"Current working directory: {os.getcwd()}")
+print(f"Static folder: {app.static_folder}")
+print(f"Static URL path: {app.static_url_path}")
 
 # Use the custom encoder for all JSON responses
 app.json_encoder = DateTimeEncoder
@@ -150,9 +158,7 @@ def serve_static(filename):
         # Search paths in order of preference
         search_dirs = [
             'static',
-            'backend/static',
-            os.path.join(os.getcwd(), 'static'),
-            os.path.join(os.getcwd(), 'backend/static')
+            os.path.join(os.getcwd(), 'static')
         ]
         
         # For JS and CSS files, check subdirectories too
@@ -165,8 +171,7 @@ def serve_static(filename):
                 
                 # Add specific subdirectory paths
                 search_dirs.extend([
-                    os.path.join('static', subdir),
-                    os.path.join('backend/static', subdir)
+                    os.path.join('static', subdir)
                 ])
                 
                 # Try to serve the file directly from subdirectories
@@ -185,7 +190,7 @@ def serve_static(filename):
             
         # If still not found, check for similar filenames in js and css directories
         if filename.endswith('.js'):
-            js_dir = os.path.join('backend/static/js')
+            js_dir = os.path.join('static/js')
             if os.path.exists(js_dir):
                 base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.4908f7be.js'
                 for file in os.listdir(js_dir):
@@ -194,7 +199,7 @@ def serve_static(filename):
                         return send_from_directory(js_dir, file, headers=headers)
                         
         if filename.endswith('.css'):
-            css_dir = os.path.join('backend/static/css')
+            css_dir = os.path.join('static/css')
             if os.path.exists(css_dir):
                 base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.42f26821.css'
                 for file in os.listdir(css_dir):
@@ -205,12 +210,12 @@ def serve_static(filename):
         # Log if file not found
         print(f"File not found: {filename}")
         print(f"Search directories: {search_dirs}")
-        if os.path.exists('backend/static'):
-            print(f"Files in backend/static: {os.listdir('backend/static')}")
-        if os.path.exists('backend/static/js'):
-            print(f"Files in backend/static/js: {os.listdir('backend/static/js')}")
-        if os.path.exists('backend/static/css'):
-            print(f"Files in backend/static/css: {os.listdir('backend/static/css')}")
+        if os.path.exists('static'):
+            print(f"Files in static: {os.listdir('static')}")
+        if os.path.exists('static/js'):
+            print(f"Files in static/js: {os.listdir('static/js')}")
+        if os.path.exists('static/css'):
+            print(f"Files in static/css: {os.listdir('static/css')}")
         
         return jsonify({"error": f"File not found: {filename}"}), 404
             
@@ -266,26 +271,6 @@ def serve(path):
                 
                 return response
             else:
-                print("No index.html found, checking in backend/templates")
-                backend_index_path = os.path.join('backend', 'templates', 'index.html')
-                if os.path.exists(backend_index_path):
-                    print(f"Serving index.html from {backend_index_path}")
-                    with open(backend_index_path, 'r') as f:
-                        content = f.read()
-                    
-                    response = app.response_class(
-                        response=content,
-                        status=200,
-                        mimetype='text/html'
-                    )
-                    
-                    # Set headers explicitly to prevent caching
-                    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-                    response.headers['Pragma'] = 'no-cache'
-                    response.headers['Expires'] = '0'
-                    
-                    return response
-                
                 print("No index.html found, creating fallback HTML page")
                 html = """
                 <!DOCTYPE html>
@@ -541,6 +526,7 @@ def analyze():
         print("\n=== Database connection refreshed ===")
         
         # Try to get the profile with a direct connection check
+        profile = None
         try:
             profile = db.get_profile(session['user_id'])
             print("\nProfile data:", profile)
@@ -2455,6 +2441,91 @@ def handle_error(e):
     
     return response
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for service diagnostics."""
+    try:
+        # Basic application info
+        app_info = {
+            'status': 'healthy',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'process_uptime': None,  # Will be set if available
+            'static_folder': app.static_folder,
+            'static_url_path': app.static_url_path
+        }
+        
+        # Try to get process start time
+        try:
+            import psutil
+            import time
+            process = psutil.Process()
+            app_info['process_uptime'] = time.time() - process.create_time()
+        except ImportError:
+            app_info['process_uptime'] = 'psutil not available'
+        
+        # Environment information
+        env_info = {
+            'python_version': sys.version,
+            'environment': os.environ.get('FLASK_ENV', 'development'),
+            'debug_mode': app.debug,
+            'platform': sys.platform,
+            'working_directory': os.getcwd()
+        }
+        
+        # Check filesystem access
+        fs_info = {
+            'static_dir_exists': os.path.exists('static'),
+            'templates_dir_exists': os.path.exists('templates'),
+            'static_dir_contents': os.listdir('static') if os.path.exists('static') else [],
+            'templates_dir_contents': os.listdir('templates') if os.path.exists('templates') else []
+        }
+        
+        # Check database connection
+        db_info = {
+            'database_type': 'unknown',
+            'connection_status': 'not initialized'
+        }
+        
+        try:
+            # Initialize DB if not already done
+            if not hasattr(db, 'conn') or db.conn is None:
+                db.connect()
+                
+            # Check connection and identify type
+            if db.conn:
+                if isinstance(db.conn, psycopg2.extensions.connection) if POSTGRES_AVAILABLE else False:
+                    db_info['database_type'] = 'PostgreSQL'
+                    db.cursor.execute("SELECT current_database(), current_user")
+                    db_result = db.cursor.fetchone()
+                    db_info['connection_status'] = f"Connected to {db_result[0]} as {db_result[1]}"
+                else:
+                    db_info['database_type'] = 'SQLite'
+                    db.cursor.execute("SELECT sqlite_version()")
+                    version = db.cursor.fetchone()[0]
+                    db_info['connection_status'] = f"Connected to SQLite version {version}"
+        except Exception as db_error:
+            db_info['connection_status'] = f"Error: {str(db_error)}"
+            
+        # Put it all together
+        result = {
+            'application': app_info,
+            'environment': env_info,
+            'filesystem': fs_info,
+            'database': db_info
+        }
+        
+        response = jsonify(result)
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+        
+    except Exception as e:
+        error_detail = {
+            'status': 'error',
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }
+        return jsonify(error_detail), 500
+
 if __name__ == '__main__':
     # Get port from environment variable (default to 5001 if not set)
     port = int(os.environ.get('PORT', 5001))
@@ -2467,7 +2538,7 @@ if __name__ == '__main__':
         print(f"Starting production server on http://0.0.0.0:{port}")
         app.run(
             debug=False,
-            host='0.0.0.0',
+            host='0.0.0.0',  # Bind to all interfaces in production
             port=port,
             ssl_context=None
         )
