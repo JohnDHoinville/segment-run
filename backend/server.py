@@ -228,34 +228,29 @@ def serve(path):
         print(f"Requested path: {path}")
         print(f"Current working directory: {os.getcwd()}")
         
-        # Get origin for CORS
-        origin = request.headers.get('Origin', '')
-        
         # Handle static file requests directly
         if path.startswith('static/'):
             static_path = path[7:]  # Remove 'static/' prefix
             return serve_static(static_path)
         
         # API paths that should be handled by the backend routes
-        api_paths = ['analyze', 'login', 'register', 'profile', 'runs', 'compare', 'logout', 'test']
+        api_paths = ['analyze', 'login', 'register', 'profile', 'runs', 'compare', 'logout', 'test', 'health', 'api', 'auth']
         
-        # For non-API routes, serve index.html (React routing will handle it)
+        # For API routes, let the other routes handle it
         if path and any(path.startswith(api_path) for api_path in api_paths):
-            # Let Flask handle API routes
-            print(f"API route detected: {path}")
-            return app.response_class(
-                response="API Endpoint",
-                status=404
-            )
+            # Just return to let the proper route handler take care of it
+            print(f"API route detected: {path}, letting the proper handler take care of it")
+            return
         
         # If we get here, serve the React app (let React Router handle client-side routing)
         try:
             # Try different possible locations for index.html
-            if os.path.exists('templates/index.html'):
-                print("Serving index.html from templates directory")
+            index_path = os.path.join('templates', 'index.html')
+            if os.path.exists(index_path):
+                print(f"Serving index.html from {index_path}")
                 
                 # Read the file and send it directly to avoid path issues
-                with open('templates/index.html', 'r') as f:
+                with open(index_path, 'r') as f:
                     content = f.read()
                 
                 response = app.response_class(
@@ -263,7 +258,34 @@ def serve(path):
                     status=200,
                     mimetype='text/html'
                 )
+                
+                # Set headers explicitly to prevent caching
+                response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                response.headers['Pragma'] = 'no-cache'
+                response.headers['Expires'] = '0'
+                
+                return response
             else:
+                print("No index.html found, checking in backend/templates")
+                backend_index_path = os.path.join('backend', 'templates', 'index.html')
+                if os.path.exists(backend_index_path):
+                    print(f"Serving index.html from {backend_index_path}")
+                    with open(backend_index_path, 'r') as f:
+                        content = f.read()
+                    
+                    response = app.response_class(
+                        response=content,
+                        status=200,
+                        mimetype='text/html'
+                    )
+                    
+                    # Set headers explicitly to prevent caching
+                    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                    response.headers['Pragma'] = 'no-cache'
+                    response.headers['Expires'] = '0'
+                    
+                    return response
+                
                 print("No index.html found, creating fallback HTML page")
                 html = """
                 <!DOCTYPE html>
@@ -273,7 +295,7 @@ def serve(path):
                     <meta name="viewport" content="width=device-width, initial-scale=1" />
                     <title>GPX4U - Running Analysis</title>
                     <style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
                         .app { max-width: 960px; margin: 0 auto; padding: 20px; }
                         .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
                         h1 { margin: 0; }
@@ -288,8 +310,9 @@ def serve(path):
                         </div>
                         <div class="container">
                             <h2>Welcome to GPX4U</h2>
-                            <p>Your running data analysis platform is being configured.</p>
-                            <p>Please check back shortly or contact support if you continue to see this message.</p>
+                            <p>Your running data analysis platform is ready.</p>
+                            <p>Please check the API documentation for available endpoints.</p>
+                            <p><a href="/health">Check API Status</a></p>
                         </div>
                     </div>
                 </body>
@@ -312,12 +335,13 @@ def serve(path):
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title>GPX4U - Running Analysis</title>
                 <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
                     .app { max-width: 960px; margin: 0 auto; padding: 20px; }
                     .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
                     h1 { margin: 0; }
                     p { line-height: 1.6; color: #333; }
                     .container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                    .error { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; }
                 </style>
             </head>
             <body>
@@ -326,9 +350,13 @@ def serve(path):
                         <h1>GPX4U Running Analysis</h1>
                     </div>
                     <div class="container">
-                        <h2>Welcome to GPX4U</h2>
-                        <p>Your running data analysis platform is being configured.</p>
-                        <p>Please check back shortly or contact support if you continue to see this message.</p>
+                        <h2>Application Error</h2>
+                        <div class="error">
+                            <p>Sorry, we encountered an error loading the application.</p>
+                            <p>Error details: """ + str(inner_e) + """</p>
+                        </div>
+                        <p>Please try again later or contact support if the issue persists.</p>
+                        <p><a href="/health">Check API Status</a></p>
                     </div>
                 </div>
             </body>
@@ -341,18 +369,14 @@ def serve(path):
             )
         
         # Set CORS headers
-        if origin in ALLOWED_ORIGINS:
+        origin = request.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
         
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Vary'] = 'Origin'
-        
-        # Don't cache index.html
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
         
         return response
         
@@ -369,12 +393,13 @@ def serve(path):
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <title>GPX4U - Running Analysis</title>
             <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
                 .app { max-width: 960px; margin: 0 auto; padding: 20px; }
                 .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
                 h1 { margin: 0; }
                 p { line-height: 1.6; color: #333; }
                 .container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .error { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; }
             </style>
         </head>
         <body>
@@ -383,9 +408,12 @@ def serve(path):
                     <h1>GPX4U Running Analysis</h1>
                 </div>
                 <div class="container">
-                    <h2>Welcome to GPX4U</h2>
-                    <p>Your running data analysis platform is being configured.</p>
-                    <p>Please check back shortly or contact support if you continue to see this message.</p>
+                    <h2>Critical Application Error</h2>
+                    <div class="error">
+                        <p>Sorry, we encountered a critical error serving the application.</p>
+                        <p>Error details: """ + str(e) + """</p>
+                    </div>
+                    <p>Please try again later or contact support if the issue persists.</p>
                 </div>
             </div>
         </body>
