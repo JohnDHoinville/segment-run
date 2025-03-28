@@ -29,15 +29,43 @@ try:
     print("Importing Flask app...")
     from app import app
     
+    # Force production mode settings
+    app.config['ENV'] = 'production'
+    app.config['DEBUG'] = False
+    app.config['TESTING'] = False
+    
     # Simple test route
     @app.route('/server-test')
     def server_test():
         return {'status': 'ok', 'message': 'Server is running properly'}
     
+    # Add a root route if it doesn't exist
+    @app.route('/')
+    def root():
+        return {
+            'status': 'ok', 
+            'message': 'GPX4U API server is running', 
+            'endpoints': [
+                '/health', 
+                '/server-test', 
+                '/api/runs', 
+                '/api/profile',
+                '/api/login',
+                '/api/register'
+            ]
+        }
+    
     if __name__ == '__main__':
         port = int(os.environ.get('PORT', 10000))
-        print(f"Starting Flask server on 0.0.0.0:{port}")
-        app.run(host='0.0.0.0', port=port)
+        print(f"Starting Flask server on 0.0.0.0:{port} in PRODUCTION mode")
+        # Explicitly set all production flags
+        app.run(
+            host='0.0.0.0', 
+            port=port, 
+            debug=False, 
+            use_reloader=False, 
+            threaded=True
+        )
 except Exception as e:
     print(f"ERROR DURING SERVER STARTUP: {str(e)}")
     traceback.print_exc()

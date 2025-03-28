@@ -9,6 +9,11 @@ import secrets
 def create_app():
     app = Flask(__name__)
     
+    # Force production mode for Render deployment
+    app.config['ENV'] = 'production'
+    app.config['DEBUG'] = False
+    app.config['TESTING'] = False
+    
     # Configure CORS
     CORS(app,
         origins=["https://gpx4u.com", "http://gpx4u.com", "https://gpx4u-0460cd678569.herokuapp.com"],
@@ -42,6 +47,22 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(health_bp)
+    
+    # Add root route
+    @app.route('/')
+    def root():
+        return {
+            'status': 'ok', 
+            'message': 'GPX4U API server is running', 
+            'version': '1.0.0',
+            'endpoints': [
+                '/health', 
+                '/api/runs', 
+                '/api/profile',
+                '/api/login',
+                '/api/register'
+            ]
+        }
     
     return app
 
