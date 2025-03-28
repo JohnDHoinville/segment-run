@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "pip install -r backend/requirements.txt",
-    "start": "cd backend && gunicorn -w 4 --access-logfile=- --error-logfile=- --bind 0.0.0.0:$PORT wsgi:app"
+    "start": "cd backend && python server_render.py"
   },
   "engines": {
     "node": ">=16.0.0"

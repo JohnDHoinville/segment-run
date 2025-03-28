@@ -7,6 +7,17 @@ import traceback
 try:
     print("Starting wsgi.py initialization...")
     
+    # Fix path for imports
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(backend_dir)
+    
+    for path in [current_dir, backend_dir, project_root]:
+        if path not in sys.path:
+            sys.path.insert(0, path)
+    
+    print(f"Updated Python path: {sys.path[:5]}")
+    
     # Load environment variables from .flaskenv
     try:
         print("Loading environment variables...")
@@ -22,13 +33,19 @@ try:
     # Change relative import to absolute import 
     print("Importing Flask app...")
     
-    # Add the current directory to the path to make imports work
-    if os.getcwd() not in sys.path:
-        sys.path.insert(0, os.getcwd())
-    
     try:
         from app import app
         print("Successfully imported app")
+    except ImportError:
+        print("First import attempt failed, trying alternative import paths...")
+        try:
+            from backend.app import app
+            print("Successfully imported app via backend.app")
+        except ImportError:
+            sys.path.insert(0, os.path.join(current_dir, 'app'))
+            print(f"Updated path again: {sys.path[:5]}")
+            from app import app
+            print("Successfully imported app after path adjustment")
     except Exception as import_error:
         print(f"Error importing app: {str(import_error)}")
         traceback.print_exc()
