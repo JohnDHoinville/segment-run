@@ -13,7 +13,12 @@ import secrets
 import traceback
 from json import JSONEncoder
 from app import app
-import psycopg2
+try:
+    import psycopg2
+    POSTGRES_AVAILABLE = True
+except (ImportError, SystemError) as e:
+    print(f"PostgreSQL support disabled: {str(e)}")
+    POSTGRES_AVAILABLE = False
 import sys
 
 # Use the custom encoder for all JSON responses
