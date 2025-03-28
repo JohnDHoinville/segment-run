@@ -969,12 +969,12 @@ def serve_manifest():
             "name": "GPX4U Running Analysis",
             "icons": [
                 {
-                    "src": "/logo192.png",
+                    "src": "/static/logo192.png",
                     "type": "image/png",
                     "sizes": "192x192"
                 },
                 {
-                    "src": "/logo512.png",
+                    "src": "/static/logo512.png",
                     "type": "image/png",
                     "sizes": "512x512"
                 }
@@ -2365,6 +2365,67 @@ def diagnostics():
             'RENDER_EXTERNAL_URL': os.environ.get('RENDER_EXTERNAL_URL', 'not set')
         }
     })
+
+@app.errorhandler(404)
+@app.errorhandler(500)
+def handle_error(e):
+    """Handle 404 and 500 errors by returning a friendly HTML page"""
+    print(f"Error handler triggered: {type(e).__name__} - {str(e)}")
+    
+    # Construct helpful error page
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>GPX4U - Error</title>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }}
+            .app {{ max-width: 960px; margin: 0 auto; padding: 20px; }}
+            .header {{ background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }}
+            h1 {{ margin: 0; }}
+            p {{ line-height: 1.6; color: #333; }}
+            .container {{ background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }}
+            .error {{ background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; margin-bottom: 20px; }}
+            .links a {{ display: inline-block; padding: 10px 15px; background-color: #4285f4; color: white; text-decoration: none; border-radius: 4px; margin-right: 10px; margin-bottom: 10px; }}
+        </style>
+    </head>
+    <body>
+        <div class="app">
+            <div class="header">
+                <h1>GPX4U Running Analysis</h1>
+            </div>
+            <div class="container">
+                <h2>Oops! Something went wrong</h2>
+                <div class="error">
+                    <strong>Error {e.code if hasattr(e, 'code') else 500}:</strong> {str(e)}
+                </div>
+                <p>The server encountered an issue while processing your request. This might be due to:</p>
+                <ul>
+                    <li>A missing file or resource</li>
+                    <li>Temporary server issue</li>
+                    <li>Configuration problem</li>
+                </ul>
+                <div class="links">
+                    <a href="/">Return to Home Page</a>
+                    <a href="/api/diagnostics">System Diagnostics</a>
+                    <a href="/health">API Health Check</a>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    # Create response
+    response = app.response_class(
+        response=html,
+        status=e.code if hasattr(e, 'code') else 500,
+        mimetype='text/html'
+    )
+    
+    return response
 
 if __name__ == '__main__':
     # Get port from environment variable (default to 5001 if not set)
