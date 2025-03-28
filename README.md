@@ -149,3 +149,49 @@ For additional help or to report issues, please contact the development team or 
 
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Update package.json for Render
+
+```bash
+echo '{
+  "name": "gpx4u",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "cd backend && python server.py",
+    "build": "echo \"No frontend build required\"",
+    "postinstall": "cd backend && pip install -r requirements.txt"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}' > package.json
+```
+
+## Render Configuration
+
+```bash
+echo 'services:
+  - type: web
+    name: gpx4u
+    env: python
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && gunicorn fixed_server:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONPATH
+        value: /app/backend
+      - key: SECRET_KEY
+        generateValue: true
+' > render.yaml
+```
+
+## Create .env file
+
+```bash
+echo 'FLASK_APP=backend.app
+FLASK_ENV=production
+SECRET_KEY=render-will-generate-this
+' > .env
+```
