@@ -64,12 +64,15 @@ def create_app():
                 'environment': os.environ.get('FLASK_ENV', 'production')
             },
             'endpoints': [
-                f'{render_external_url}/health', 
+                f'{render_external_url}/health',
                 f'{render_external_url}/server-test',
-                f'{render_external_url}/api/runs', 
-                f'{render_external_url}/api/profile',
-                f'{render_external_url}/api/login',
-                f'{render_external_url}/api/register'
+                f'{render_external_url}/runs',
+                f'{render_external_url}/profile',
+                f'{render_external_url}/auth/login',
+                f'{render_external_url}/auth/register',
+                f'{render_external_url}/auth/logout',
+                f'{render_external_url}/auth/check',
+                f'{render_external_url}/analyze'
             ]
         }
     

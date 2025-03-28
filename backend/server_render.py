@@ -40,7 +40,15 @@ try:
     # Simple test route
     @app.route('/server-test')
     def server_test():
-        return {'status': 'ok', 'message': 'Server is running properly'}
+        return {
+            'status': 'ok',
+            'message': 'Server is running properly',
+            'environment': os.environ.get('FLASK_ENV', 'production'),
+            'render_service': os.environ.get('RENDER_SERVICE_NAME', 'unknown'),
+            'port': os.environ.get('PORT', 'unknown'),
+            'python_version': sys.version,
+            'directory': os.getcwd()
+        }
     
     # Root route is already defined in app/__init__.py
     
