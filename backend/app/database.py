@@ -6,8 +6,15 @@ import threading
 from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
 from json import JSONEncoder
-import psycopg2
-from psycopg2.extras import DictCursor
+
+try:
+    import psycopg2
+    from psycopg2.extras import DictCursor
+    POSTGRES_AVAILABLE = True
+except (ImportError, SystemError) as e:
+    print(f"PostgreSQL support disabled: {str(e)}")
+    POSTGRES_AVAILABLE = False
+
 from urllib.parse import urlparse
 
 # Add a proper JSON encoder for Infinity values
@@ -52,7 +59,7 @@ class RunDatabase:
             
             print(f"Connecting to database. DATABASE_URL exists: {database_url is not None}")
             
-            if database_url:
+            if database_url and POSTGRES_AVAILABLE:
                 print(f"Using PostgreSQL connection with DATABASE_URL")
                 
                 # Parse the URL and create connection string
@@ -93,7 +100,7 @@ class RunDatabase:
                     self.cursor = self.conn.cursor()
             else:
                 # Fallback to SQLite for local development
-                print("No DATABASE_URL found, using SQLite database")
+                print("No DATABASE_URL found or PostgreSQL not available, using SQLite database")
                 self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
                 self.conn.row_factory = sqlite3.Row
                 self.cursor = self.conn.cursor()
@@ -189,7 +196,7 @@ class RunDatabase:
 
     def init_db(self):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if isinstance(self.conn, psycopg2.extensions.connection) and POSTGRES_AVAILABLE:
                 # PostgreSQL initialization
                 # First check if the tables already exist
                 self.cursor.execute("""
@@ -323,7 +330,7 @@ class RunDatabase:
 
     def ensure_tables(self):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if isinstance(self.conn, psycopg2.extensions.connection) and POSTGRES_AVAILABLE:
                 # PostgreSQL table check
                 self.cursor.execute("""
                     SELECT EXISTS (
