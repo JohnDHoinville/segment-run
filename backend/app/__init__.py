@@ -49,32 +49,7 @@ def create_app():
     app.register_blueprint(profile_bp)
     app.register_blueprint(health_bp)
     
-    # Add root route
-    @app.route('/')
-    def root():
-        render_external_url = os.environ.get('RENDER_EXTERNAL_URL', 'unknown')
-        service_name = os.environ.get('RENDER_SERVICE_NAME', 'gpx4u')
-        return {
-            'status': 'ok', 
-            'message': 'GPX4U API server is running', 
-            'version': '1.0.0',
-            'service_info': {
-                'name': service_name,
-                'public_url': render_external_url,
-                'environment': os.environ.get('FLASK_ENV', 'production')
-            },
-            'endpoints': [
-                f'{render_external_url}/health',
-                f'{render_external_url}/server-test',
-                f'{render_external_url}/runs',
-                f'{render_external_url}/profile',
-                f'{render_external_url}/auth/login',
-                f'{render_external_url}/auth/register',
-                f'{render_external_url}/auth/logout',
-                f'{render_external_url}/auth/check',
-                f'{render_external_url}/analyze'
-            ]
-        }
+    # Root route is handled by server.py to serve the frontend
     
     return app
 

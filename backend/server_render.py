@@ -50,7 +50,7 @@ try:
             'directory': os.getcwd()
         }
     
-    # Root route is already defined in app/__init__.py
+    # Root route is handled by server.py to serve the frontend
     
     if __name__ == '__main__':
         port = int(os.environ.get('PORT', 10000))
