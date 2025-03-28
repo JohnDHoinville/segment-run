@@ -7,4 +7,3 @@ werkzeug==2.0.1
 psycopg2-binary==2.8.6
 tzlocal==4.3
 pytz==2023.3
-Pillow==10.2.0

@@ -2,7 +2,7 @@ services:
   - type: web
     name: gpx4u
     runtime: python
-    buildCommand: pip install -r backend/requirements.txt && cd backend && python create_logos.py
+    buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && python server_render.py
     envVars:
       - key: PYTHON_VERSION

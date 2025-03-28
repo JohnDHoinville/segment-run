@@ -42,8 +42,24 @@ print(f"Current working directory: {os.getcwd()}")
 print(f"Static folder: {app.static_folder}")
 print(f"Static URL path: {app.static_url_path}")
 
-# Use the custom encoder for all JSON responses
-app.json_encoder = DateTimeEncoder
+# Helper function for setting CORS headers
+def set_cors_headers(response):
+    """Helper function to set CORS headers consistently."""
+    origin = request.headers.get('Origin', '')
+    if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    else:
+        response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
+        
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Vary'] = 'Origin'
+    return response
+
+# app.json_encoder = DateTimeEncoder
+ALLOWED_ORIGINS = ['https://gpx4u.com', 'http://gpx4u.com', 'http://localhost:3000', 'http://localhost:5000', '*']
+
+# Set permanent session lifetime
+app.permanent_session_lifetime = datetime.timedelta(days=30)
 
 # Configure session
 app.config.update(
@@ -158,7 +174,9 @@ def serve_static(filename):
         # Search paths in order of preference
         search_dirs = [
             'static',
-            os.path.join(os.getcwd(), 'static')
+            'backend/static',
+            os.path.join(os.getcwd(), 'static'),
+            os.path.join(os.getcwd(), 'backend/static')
         ]
         
         # For JS and CSS files, check subdirectories too
@@ -171,7 +189,8 @@ def serve_static(filename):
                 
                 # Add specific subdirectory paths
                 search_dirs.extend([
-                    os.path.join('static', subdir)
+                    os.path.join('static', subdir),
+                    os.path.join('backend/static', subdir)
                 ])
                 
                 # Try to serve the file directly from subdirectories
@@ -190,7 +209,7 @@ def serve_static(filename):
             
         # If still not found, check for similar filenames in js and css directories
         if filename.endswith('.js'):
-            js_dir = os.path.join('static/js')
+            js_dir = os.path.join('backend/static/js')
             if os.path.exists(js_dir):
                 base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.4908f7be.js'
                 for file in os.listdir(js_dir):
@@ -199,7 +218,7 @@ def serve_static(filename):
                         return send_from_directory(js_dir, file, headers=headers)
                         
         if filename.endswith('.css'):
-            css_dir = os.path.join('static/css')
+            css_dir = os.path.join('backend/static/css')
             if os.path.exists(css_dir):
                 base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.42f26821.css'
                 for file in os.listdir(css_dir):
@@ -210,12 +229,12 @@ def serve_static(filename):
         # Log if file not found
         print(f"File not found: {filename}")
         print(f"Search directories: {search_dirs}")
-        if os.path.exists('static'):
-            print(f"Files in static: {os.listdir('static')}")
-        if os.path.exists('static/js'):
-            print(f"Files in static/js: {os.listdir('static/js')}")
-        if os.path.exists('static/css'):
-            print(f"Files in static/css: {os.listdir('static/css')}")
+        if os.path.exists('backend/static'):
+            print(f"Files in backend/static: {os.listdir('backend/static')}")
+        if os.path.exists('backend/static/js'):
+            print(f"Files in backend/static/js: {os.listdir('backend/static/js')}")
+        if os.path.exists('backend/static/css'):
+            print(f"Files in backend/static/css: {os.listdir('backend/static/css')}")
         
         return jsonify({"error": f"File not found: {filename}"}), 404
             
@@ -233,12 +252,8 @@ def serve(path):
         print(f"Requested path: {path}")
         print(f"Current working directory: {os.getcwd()}")
         
-        # List of paths that should be publicly accessible without authentication
-        public_paths = ['login', 'register', 'auth', 'static', 'health', 'favicon.ico', 'manifest.json', 'robots.txt']
-        
-        # Check if user is requesting a public path or already authenticated
-        is_public_path = any(path.startswith(p) for p in public_paths) if path else True  # Root path is public
-        is_authenticated = 'user_id' in session
+        # Get origin for CORS
+        origin = request.headers.get('Origin', '')
         
         # Handle static file requests directly
         if path.startswith('static/'):
@@ -246,28 +261,25 @@ def serve(path):
             return serve_static(static_path)
         
         # API paths that should be handled by the backend routes
-        api_paths = ['analyze', 'login', 'register', 'profile', 'runs', 'compare', 'logout', 'test', 'health', 'api', 'auth']
+        api_paths = ['analyze', 'login', 'register', 'profile', 'runs', 'compare', 'logout', 'test']
         
-        # For API routes, let the other routes handle it
+        # For non-API routes, serve index.html (React routing will handle it)
         if path and any(path.startswith(api_path) for api_path in api_paths):
-            # Just return to let the proper route handler take care of it
-            print(f"API route detected: {path}, letting the proper handler take care of it")
-            return
-        
-        # For protected paths, redirect to login if not authenticated
-        if not is_public_path and not is_authenticated:
-            print(f"Protected path '{path}' requested without authentication, user will see login page")
-            # We don't redirect, just let the React app handle routing to login
+            # Let Flask handle API routes
+            print(f"API route detected: {path}")
+            return app.response_class(
+                response="API Endpoint",
+                status=404
+            )
         
         # If we get here, serve the React app (let React Router handle client-side routing)
         try:
             # Try different possible locations for index.html
-            index_path = os.path.join('templates', 'index.html')
-            if os.path.exists(index_path):
-                print(f"Serving index.html from {index_path}")
+            if os.path.exists('templates/index.html'):
+                print("Serving index.html from templates directory")
                 
                 # Read the file and send it directly to avoid path issues
-                with open(index_path, 'r') as f:
+                with open('templates/index.html', 'r') as f:
                     content = f.read()
                 
                 response = app.response_class(
@@ -275,13 +287,6 @@ def serve(path):
                     status=200,
                     mimetype='text/html'
                 )
-                
-                # Set headers explicitly to prevent caching
-                response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-                response.headers['Pragma'] = 'no-cache'
-                response.headers['Expires'] = '0'
-                
-                return response
             else:
                 print("No index.html found, creating fallback HTML page")
                 html = """
@@ -292,7 +297,7 @@ def serve(path):
                     <meta name="viewport" content="width=device-width, initial-scale=1" />
                     <title>GPX4U - Running Analysis</title>
                     <style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
                         .app { max-width: 960px; margin: 0 auto; padding: 20px; }
                         .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
                         h1 { margin: 0; }
@@ -307,9 +312,8 @@ def serve(path):
                         </div>
                         <div class="container">
                             <h2>Welcome to GPX4U</h2>
-                            <p>Your running data analysis platform is ready.</p>
-                            <p>Please check the API documentation for available endpoints.</p>
-                            <p><a href="/health">Check API Status</a></p>
+                            <p>Your running data analysis platform is being configured.</p>
+                            <p>Please check back shortly or contact support if you continue to see this message.</p>
                         </div>
                     </div>
                 </body>
@@ -332,13 +336,12 @@ def serve(path):
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title>GPX4U - Running Analysis</title>
                 <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
                     .app { max-width: 960px; margin: 0 auto; padding: 20px; }
                     .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
                     h1 { margin: 0; }
                     p { line-height: 1.6; color: #333; }
                     .container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                    .error { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; }
                 </style>
             </head>
             <body>
@@ -347,13 +350,9 @@ def serve(path):
                         <h1>GPX4U Running Analysis</h1>
                     </div>
                     <div class="container">
-                        <h2>Application Error</h2>
-                        <div class="error">
-                            <p>Sorry, we encountered an error loading the application.</p>
-                            <p>Error details: """ + str(inner_e) + """</p>
-                        </div>
-                        <p>Please try again later or contact support if the issue persists.</p>
-                        <p><a href="/health">Check API Status</a></p>
+                        <h2>Welcome to GPX4U</h2>
+                        <p>Your running data analysis platform is being configured.</p>
+                        <p>Please check back shortly or contact support if you continue to see this message.</p>
                     </div>
                 </div>
             </body>
@@ -366,14 +365,18 @@ def serve(path):
             )
         
         # Set CORS headers
-        origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
+        if origin in ALLOWED_ORIGINS:
             response.headers['Access-Control-Allow-Origin'] = origin
         else:
             response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
         
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Vary'] = 'Origin'
+        
+        # Don't cache index.html
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
         
         return response
         
@@ -390,13 +393,12 @@ def serve(path):
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <title>GPX4U - Running Analysis</title>
             <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; }
                 .app { max-width: 960px; margin: 0 auto; padding: 20px; }
                 .header { background-color: #4285f4; color: white; padding: 20px; text-align: center; margin-bottom: 30px; border-radius: 5px; }
                 h1 { margin: 0; }
                 p { line-height: 1.6; color: #333; }
                 .container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                .error { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; }
             </style>
         </head>
         <body>
@@ -405,12 +407,9 @@ def serve(path):
                     <h1>GPX4U Running Analysis</h1>
                 </div>
                 <div class="container">
-                    <h2>Critical Application Error</h2>
-                    <div class="error">
-                        <p>Sorry, we encountered a critical error serving the application.</p>
-                        <p>Error details: """ + str(e) + """</p>
-                    </div>
-                    <p>Please try again later or contact support if the issue persists.</p>
+                    <h2>Welcome to GPX4U</h2>
+                    <p>Your running data analysis platform is being configured.</p>
+                    <p>Please check back shortly or contact support if you continue to see this message.</p>
                 </div>
             </div>
         </body>
@@ -538,10 +537,9 @@ def analyze():
         print("\n=== Database connection refreshed ===")
         
         # Try to get the profile with a direct connection check
-        profile = None
         try:
-            profile = db.get_profile(session['user_id'])
-            print("\nProfile data:", profile)
+        profile = db.get_profile(session['user_id'])
+        print("\nProfile data:", profile)
         except Exception as profile_error:
             print(f"Error getting profile: {str(profile_error)}")
             # Create default profile if fetch fails
@@ -1339,6 +1337,13 @@ def check_auth():
     print(f"Request headers: {dict(request.headers)}")
     print(f"Session: {dict(session)}")
     
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return set_cors_headers(response)
+    
     try:
         if 'user_id' in session:
             user_id = session['user_id']
@@ -1367,25 +1372,7 @@ def check_auth():
                 'message': 'Not authenticated'
             })
             
-        # Set explicit CORS headers
-        origin = request.headers.get('Origin', '')
-        print(f"Origin header: {origin}")
-        
-        # Special handling for production URLs
-        if origin and 'herokuapp.com' in origin:
-            print(f"Setting Access-Control-Allow-Origin to match herokuapp origin: {origin}")
-            response.headers['Access-Control-Allow-Origin'] = origin
-        elif origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            print(f"Setting Access-Control-Allow-Origin from allowed origins: {origin}")
-            response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            print(f"Using default Access-Control-Allow-Origin: https://gpx4u.com")
-            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Vary'] = 'Origin'
-        print(f"Response headers: {dict(response.headers)}")
-        return response
+        return set_cors_headers(response)
         
     except Exception as e:
         print(f"Auth check error: {str(e)}")
@@ -1396,24 +1383,25 @@ def check_auth():
             'user_id': None
         })
         
-        # Set CORS headers even on error
-        origin = request.headers.get('Origin', '')
-        if origin and 'herokuapp.com' in origin:
-            error_response.headers['Access-Control-Allow-Origin'] = origin
-        elif origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            error_response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-        error_response.headers['Vary'] = 'Origin'
-        return error_response, 500
+        return set_cors_headers(error_response), 500
 
 @app.route('/auth/login', methods=['POST', 'OPTIONS'])
 def login():
     print("\n=== Login Attempt ===")
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return set_cors_headers(response)
+        
     try:
-        data = request.json
+        # Get data either from JSON or form data
+        if request.is_json:
+            data = request.json
+        else:
+            data = request.form
+            
         print(f"Login attempt for: {data.get('username', 'unknown')}")
         
         username = data.get('username')
@@ -1422,16 +1410,7 @@ def login():
         if not username or not password:
             print("Missing username or password")
             error_response = jsonify({'error': 'Missing username or password'})
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 400
+            return set_cors_headers(error_response), 400
             
         # Check credentials
         user_id = db.verify_user(username, password)
@@ -1449,48 +1428,28 @@ def login():
                 'username': username
             })
             
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                success_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            success_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            success_response.headers['Vary'] = 'Origin'
-            return success_response
+            return set_cors_headers(success_response)
         else:
             print(f"Invalid login credentials for: {username}")
             error_response = jsonify({'error': 'Invalid credentials'})
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 401
+            return set_cors_headers(error_response), 401
             
     except Exception as e:
         print(f"Login error: {str(e)}")
         traceback.print_exc()
         error_response = jsonify({'error': str(e)})
-        # Set CORS headers even on error
-        origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            error_response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-        error_response.headers['Vary'] = 'Origin'
-        return error_response, 500
+        return set_cors_headers(error_response), 500
 
 @app.route('/auth/logout', methods=['POST', 'OPTIONS'])
 def logout():
     print("\n=== Logout ===")
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return set_cors_headers(response)
+        
     try:
         session.clear()
         response = jsonify({
@@ -1498,16 +1457,7 @@ def logout():
             'message': 'Logged out successfully'
         })
         
-        # Set CORS headers 
-        origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Vary'] = 'Origin'
-        return response
+        return set_cors_headers(response)
     except Exception as e:
         print(f"Logout error: {str(e)}")
         traceback.print_exc()
@@ -1516,22 +1466,25 @@ def logout():
             'error': str(e)
         })
         
-        # Set CORS headers even on error
-        origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            error_response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-        error_response.headers['Vary'] = 'Origin'
-        return error_response, 500
+        return set_cors_headers(error_response), 500
 
 @app.route('/auth/register', methods=['POST', 'OPTIONS'])
 def register():
     print("\n=== Register User ===")
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return set_cors_headers(response)
+        
     try:
-        data = request.json
+        # Get data either from JSON or form data
+        if request.is_json:
+            data = request.json
+        else:
+            data = request.form
+            
         print(f"Registration attempt for: {data.get('username', 'unknown')}")
         
         username = data.get('username')
@@ -1541,34 +1494,14 @@ def register():
         if not username or not password or not email:
             print("Missing required registration fields")
             error_response = jsonify({'error': 'Missing required fields'})
-            
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 400
+            return set_cors_headers(error_response), 400
             
         # Check if user already exists
         existing_user = db.get_user_by_username(username)
         if existing_user:
             print(f"Username already exists: {username}")
             error_response = jsonify({'error': 'Username already exists'})
-            
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 409
+            return set_cors_headers(error_response), 409
             
         # Register the new user
         user_id = db.register_user(username, password, email)
@@ -1592,46 +1525,17 @@ def register():
                 'username': username
             })
             
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                success_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                success_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            success_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            success_response.headers['Vary'] = 'Origin'
-            return success_response
+            return set_cors_headers(success_response)
         else:
             print(f"Failed to register user: {username}")
             error_response = jsonify({'error': 'Registration failed'})
-            
-            # Set CORS headers
-            origin = request.headers.get('Origin', '')
-            if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-                error_response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-                
-            error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-            error_response.headers['Vary'] = 'Origin'
-            return error_response, 500
+            return set_cors_headers(error_response), 500
             
     except Exception as e:
         print(f"Registration error: {str(e)}")
         traceback.print_exc()
         error_response = jsonify({'error': str(e)})
-        
-        # Set CORS headers even on error
-        origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            error_response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            error_response.headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        error_response.headers['Access-Control-Allow-Credentials'] = 'true'
-        error_response.headers['Vary'] = 'Origin'
-        return error_response, 500
+        return set_cors_headers(error_response), 500
 
 @app.route('/static/js/main.ed081796.js.map')
 def serve_main_js_map():
@@ -2455,163 +2359,6 @@ def handle_error(e):
     
     return response
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint for service diagnostics."""
-    try:
-        # Basic application info
-        app_info = {
-            'status': 'healthy',
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'process_uptime': None,  # Will be set if available
-            'static_folder': app.static_folder,
-            'static_url_path': app.static_url_path
-        }
-        
-        # Try to get process start time
-        try:
-            import psutil
-            import time
-            process = psutil.Process()
-            app_info['process_uptime'] = time.time() - process.create_time()
-        except ImportError:
-            app_info['process_uptime'] = 'psutil not available'
-        
-        # Environment information
-        env_info = {
-            'python_version': sys.version,
-            'environment': os.environ.get('FLASK_ENV', 'development'),
-            'debug_mode': app.debug,
-            'platform': sys.platform,
-            'working_directory': os.getcwd()
-        }
-        
-        # Check filesystem access
-        fs_info = {
-            'static_dir_exists': os.path.exists('static'),
-            'templates_dir_exists': os.path.exists('templates'),
-            'static_dir_contents': os.listdir('static') if os.path.exists('static') else [],
-            'templates_dir_contents': os.listdir('templates') if os.path.exists('templates') else []
-        }
-        
-        # Check database connection
-        db_info = {
-            'database_type': 'unknown',
-            'connection_status': 'not initialized'
-        }
-        
-        try:
-            # Initialize DB if not already done
-            if not hasattr(db, 'conn') or db.conn is None:
-                db.connect()
-                
-            # Check connection and identify type
-            if db.conn:
-                if isinstance(db.conn, psycopg2.extensions.connection) if POSTGRES_AVAILABLE else False:
-                    db_info['database_type'] = 'PostgreSQL'
-                    db.cursor.execute("SELECT current_database(), current_user")
-                    db_result = db.cursor.fetchone()
-                    db_info['connection_status'] = f"Connected to {db_result[0]} as {db_result[1]}"
-                else:
-                    db_info['database_type'] = 'SQLite'
-                    db.cursor.execute("SELECT sqlite_version()")
-                    version = db.cursor.fetchone()[0]
-                    db_info['connection_status'] = f"Connected to SQLite version {version}"
-        except Exception as db_error:
-            db_info['connection_status'] = f"Error: {str(db_error)}"
-            
-        # Put it all together
-        result = {
-            'application': app_info,
-            'environment': env_info,
-            'filesystem': fs_info,
-            'database': db_info
-        }
-        
-        response = jsonify(result)
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        return response
-        
-    except Exception as e:
-        error_detail = {
-            'status': 'error',
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        }
-        return jsonify(error_detail), 500
-
-@app.route('/login')
-def login_page():
-    """Special route to ensure login page can be accessed without authentication."""
-    print("\n=== Serving Login Page ===")
-    
-    # Serve the React app index.html to let React Router handle login page
-    try:
-        index_path = os.path.join('templates', 'index.html')
-        if os.path.exists(index_path):
-            print(f"Serving login page from {index_path}")
-            
-            # Read the file and send it directly
-            with open(index_path, 'r') as f:
-                content = f.read()
-            
-            response = app.response_class(
-                response=content,
-                status=200,
-                mimetype='text/html'
-            )
-            
-            # Set headers to prevent caching
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            
-            return response
-        else:
-            print("No index.html found, redirecting to root")
-            return redirect('/')
-            
-    except Exception as e:
-        print(f"Error serving login page: {str(e)}")
-        traceback.print_exc()
-        return redirect('/')
-
-@app.route('/register')
-def register_page():
-    """Special route to ensure registration page can be accessed without authentication."""
-    print("\n=== Serving Registration Page ===")
-    
-    # Serve the React app index.html to let React Router handle registration page
-    try:
-        index_path = os.path.join('templates', 'index.html')
-        if os.path.exists(index_path):
-            print(f"Serving registration page from {index_path}")
-            
-            # Read the file and send it directly
-            with open(index_path, 'r') as f:
-                content = f.read()
-            
-            response = app.response_class(
-                response=content,
-                status=200,
-                mimetype='text/html'
-            )
-            
-            # Set headers to prevent caching
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            
-            return response
-        else:
-            print("No index.html found, redirecting to root")
-            return redirect('/')
-            
-    except Exception as e:
-        print(f"Error serving registration page: {str(e)}")
-        traceback.print_exc()
-        return redirect('/')
-
 if __name__ == '__main__':
     # Get port from environment variable (default to 5001 if not set)
     port = int(os.environ.get('PORT', 5001))
@@ -2624,15 +2371,15 @@ if __name__ == '__main__':
         print(f"Starting production server on http://0.0.0.0:{port}")
         app.run(
             debug=False,
-            host='0.0.0.0',  # Bind to all interfaces in production
+            host='0.0.0.0',
             port=port,
             ssl_context=None
         )
     else:
         print(f"Starting development server on http://localhost:{port}")
-        app.run(
-            debug=True,
-            host='localhost',
+    app.run(
+        debug=True,
+        host='localhost',
             port=port,
-            ssl_context=None
-        ) 
+        ssl_context=None
+    ) 
