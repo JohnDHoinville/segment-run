@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#4285f4"/>
     <meta name="description" content="GPX4U - Running Analysis Application"/>
     <link rel="apple-touch-icon" href="/static/logo192.png"/>
-    <link rel="manifest" href="/manifest.json"/>
+    <link rel="manifest" href="/static/manifest.json"/>
     <title>GPX4U Running Analysis</title>
     <script defer="defer" src="/static/js/main.4908f7be.js"></script>
     <link href="/static/css/main.42f26821.css" rel="stylesheet">
@@ -194,6 +194,7 @@
                               type="text"
                               id="username"
                               required
+                              autocomplete="username"
                               autofocus
                             />
                         </div>
@@ -204,6 +205,7 @@
                               type="email"
                               id="email"
                               required
+                              autocomplete="email"
                             />
                         </div>
                         
@@ -213,6 +215,7 @@
                               type="password"
                               id="password"
                               required
+                              autocomplete="current-password"
                             />
                         </div>
                         
@@ -377,11 +380,11 @@
                 .then(response => response.json())
                 .then(data => {
                     console.log('Logout response:', data);
-                    showLoginForm();
+                    window.location.href = '/'; // Force reload the page after logout
                 })
                 .catch(error => {
                     console.error('Logout error:', error);
-                    showLoginForm(); // Show login form anyway on error
+                    window.location.href = '/'; // Reload anyway on error
                 });
             });
             
@@ -406,15 +409,10 @@
                 sessionStorage.setItem('user_id', userId);
                 sessionStorage.setItem('username', username);
                 
-                // Try loading the main app if it's built into the page
+                // Reload the page to get the full app
                 setTimeout(() => {
-                    // Check if React app has loaded
-                    if (document.getElementById('root').children.length > 1) {
-                        console.log('React app detected, not redirecting');
-                    } else {
-                        console.log('Loading main app interface');
-                        // The main React app will take over
-                    }
+                    // Fully reload to go to the main app
+                    window.location.href = '/runs';
                 }, 500);
             }
             

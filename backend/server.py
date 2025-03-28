@@ -170,13 +170,15 @@ def serve_static(filename):
             headers['Content-Type'] = 'image/svg+xml'
         elif filename.endswith('.json'):
             headers['Content-Type'] = 'application/json'
+        elif filename.endswith('.ico'):
+            headers['Content-Type'] = 'image/x-icon'
             
         # Search paths in order of preference
         search_dirs = [
             'static',
-            'backend/static',
             os.path.join(os.getcwd(), 'static'),
-            os.path.join(os.getcwd(), 'backend/static')
+            'app/static',
+            os.path.join(os.getcwd(), 'app/static')
         ]
         
         # For JS and CSS files, check subdirectories too
@@ -190,7 +192,7 @@ def serve_static(filename):
                 # Add specific subdirectory paths
                 search_dirs.extend([
                     os.path.join('static', subdir),
-                    os.path.join('backend/static', subdir)
+                    os.path.join('app/static', subdir)
                 ])
                 
                 # Try to serve the file directly from subdirectories
@@ -199,6 +201,59 @@ def serve_static(filename):
                     if os.path.exists(file_path):
                         print(f"Found file at: {file_path}")
                         return send_from_directory(os.path.dirname(file_path), os.path.basename(file_path), headers=headers)
+        
+        # Special case for favicon.ico and logo192.png
+        if filename in ['favicon.ico', 'logo192.png', 'manifest.json']:
+            # Look in all static directories
+            for search_dir in ['static', 'app/static']:
+                file_path = os.path.join(search_dir, filename)
+                if os.path.exists(file_path):
+                    print(f"Found file at: {file_path}")
+                    return send_from_directory(search_dir, filename, headers=headers)
+            
+            # If not found, check if we have default icons
+            default_icons = {
+                'favicon.ico': """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                      <rect width="100" height="100" fill="#4285f4"></rect>
+                      <text x="50" y="50" font-family="Arial" font-size="30" fill="white" text-anchor="middle" dominant-baseline="middle">G</text>
+                    </svg>
+                """,
+                'logo192.png': """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+                      <rect width="192" height="192" fill="#4285f4"></rect>
+                      <text x="96" y="96" font-family="Arial" font-size="70" fill="white" text-anchor="middle" dominant-baseline="middle">GPX</text>
+                    </svg>
+                """,
+                'manifest.json': json.dumps({
+                    "short_name": "GPX4U",
+                    "name": "GPX4U Running Analysis",
+                    "icons": [
+                        {
+                            "src": "/static/logo192.png",
+                            "sizes": "192x192",
+                            "type": "image/png"
+                        }
+                    ],
+                    "start_url": ".",
+                    "display": "standalone",
+                    "theme_color": "#4285f4",
+                    "background_color": "#ffffff"
+                })
+            }
+            
+            if filename in default_icons:
+                print(f"Using default {filename}")
+                content = default_icons[filename]
+                content_type = 'image/svg+xml'
+                if filename == 'manifest.json':
+                    content_type = 'application/json'
+                
+                response = make_response(content)
+                response.headers['Content-Type'] = content_type
+                for key, value in headers.items():
+                    response.headers[key] = value
+                return response
         
         # Try each search directory for the full path
         for search_dir in search_dirs:
@@ -209,7 +264,7 @@ def serve_static(filename):
             
         # If still not found, check for similar filenames in js and css directories
         if filename.endswith('.js'):
-            js_dir = os.path.join('backend/static/js')
+            js_dir = os.path.join('static/js')
             if os.path.exists(js_dir):
                 base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.4908f7be.js'
                 for file in os.listdir(js_dir):
@@ -218,7 +273,7 @@ def serve_static(filename):
                         return send_from_directory(js_dir, file, headers=headers)
                         
         if filename.endswith('.css'):
-            css_dir = os.path.join('backend/static/css')
+            css_dir = os.path.join('static/css')
             if os.path.exists(css_dir):
                 base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.42f26821.css'
                 for file in os.listdir(css_dir):
@@ -229,12 +284,13 @@ def serve_static(filename):
         # Log if file not found
         print(f"File not found: {filename}")
         print(f"Search directories: {search_dirs}")
-        if os.path.exists('backend/static'):
-            print(f"Files in backend/static: {os.listdir('backend/static')}")
-        if os.path.exists('backend/static/js'):
-            print(f"Files in backend/static/js: {os.listdir('backend/static/js')}")
-        if os.path.exists('backend/static/css'):
-            print(f"Files in backend/static/css: {os.listdir('backend/static/css')}")
+        for dir in search_dirs:
+            if os.path.exists(dir):
+                print(f"Files in {dir}: {os.listdir(dir)}")
+                
+        for special_dir in ['static/js', 'static/css', 'app/static/js', 'app/static/css']:
+            if os.path.exists(special_dir):
+                print(f"Files in {special_dir}: {os.listdir(special_dir)}")
         
         return jsonify({"error": f"File not found: {filename}"}), 404
             
@@ -2360,6 +2416,47 @@ def handle_error(e):
     
     return response
 
+# Special routes for the SPA
+@app.route('/runs')
+@app.route('/profile')
+@app.route('/analyze')
+def spa_routes():
+    """
+    Special routes that should load the SPA (Single Page Application)
+    and let React Router handle the routing on the client side.
+    """
+    print(f"\n=== SPA Route Request: {request.path} ===")
+    
+    try:
+        if 'user_id' not in session:
+            print("User not authenticated, redirecting to login page")
+            return redirect('/')
+        
+        # Serve the React app
+        if os.path.exists('templates/index.html'):
+            with open('templates/index.html', 'r') as f:
+                content = f.read()
+            
+            response = app.response_class(
+                response=content,
+                status=200,
+                mimetype='text/html'
+            )
+            
+            # Don't cache SPA routes
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
+            return response
+        else:
+            print("SPA template not found, redirecting to root")
+            return redirect('/')
+    except Exception as e:
+        print(f"Error serving SPA route {request.path}: {str(e)}")
+        traceback.print_exc()
+        return redirect('/')
+
 if __name__ == '__main__':
     # Get port from environment variable (default to 5001 if not set)
     port = int(os.environ.get('PORT', 5001))
@@ -2372,15 +2469,15 @@ if __name__ == '__main__':
         print(f"Starting production server on http://0.0.0.0:{port}")
         app.run(
             debug=False,
-            host='0.0.0.0',
+            host='0.0.0.0',  # Bind to all interfaces in production
             port=port,
             ssl_context=None
         )
     else:
         print(f"Starting development server on http://localhost:{port}")
-    app.run(
-        debug=True,
-        host='localhost',
+        app.run(
+            debug=True,
+            host='localhost',
             port=port,
-        ssl_context=None
-    ) 
+            ssl_context=None
+        )
