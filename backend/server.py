@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session, send_from_directory, make_response, send_file
+from flask import Flask, request, jsonify, session, send_from_directory, make_response, send_file, redirect
 from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
@@ -233,6 +233,13 @@ def serve(path):
         print(f"Requested path: {path}")
         print(f"Current working directory: {os.getcwd()}")
         
+        # List of paths that should be publicly accessible without authentication
+        public_paths = ['login', 'register', 'auth', 'static', 'health', 'favicon.ico', 'manifest.json', 'robots.txt']
+        
+        # Check if user is requesting a public path or already authenticated
+        is_public_path = any(path.startswith(p) for p in public_paths) if path else True  # Root path is public
+        is_authenticated = 'user_id' in session
+        
         # Handle static file requests directly
         if path.startswith('static/'):
             static_path = path[7:]  # Remove 'static/' prefix
@@ -246,6 +253,11 @@ def serve(path):
             # Just return to let the proper route handler take care of it
             print(f"API route detected: {path}, letting the proper handler take care of it")
             return
+        
+        # For protected paths, redirect to login if not authenticated
+        if not is_public_path and not is_authenticated:
+            print(f"Protected path '{path}' requested without authentication, user will see login page")
+            # We don't redirect, just let the React app handle routing to login
         
         # If we get here, serve the React app (let React Router handle client-side routing)
         try:
@@ -1344,13 +1356,15 @@ def check_auth():
                 session.clear()
                 response = jsonify({
                     'authenticated': False,
-                    'user_id': None
+                    'user_id': None,
+                    'message': 'User not found'
                 })
         else:
             # If we get here, user is not authenticated
             response = jsonify({
                 'authenticated': False,
-                'user_id': None
+                'user_id': None,
+                'message': 'Not authenticated'
             })
             
         # Set explicit CORS headers
@@ -2525,6 +2539,78 @@ def health_check():
             'traceback': traceback.format_exc()
         }
         return jsonify(error_detail), 500
+
+@app.route('/login')
+def login_page():
+    """Special route to ensure login page can be accessed without authentication."""
+    print("\n=== Serving Login Page ===")
+    
+    # Serve the React app index.html to let React Router handle login page
+    try:
+        index_path = os.path.join('templates', 'index.html')
+        if os.path.exists(index_path):
+            print(f"Serving login page from {index_path}")
+            
+            # Read the file and send it directly
+            with open(index_path, 'r') as f:
+                content = f.read()
+            
+            response = app.response_class(
+                response=content,
+                status=200,
+                mimetype='text/html'
+            )
+            
+            # Set headers to prevent caching
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
+            return response
+        else:
+            print("No index.html found, redirecting to root")
+            return redirect('/')
+            
+    except Exception as e:
+        print(f"Error serving login page: {str(e)}")
+        traceback.print_exc()
+        return redirect('/')
+
+@app.route('/register')
+def register_page():
+    """Special route to ensure registration page can be accessed without authentication."""
+    print("\n=== Serving Registration Page ===")
+    
+    # Serve the React app index.html to let React Router handle registration page
+    try:
+        index_path = os.path.join('templates', 'index.html')
+        if os.path.exists(index_path):
+            print(f"Serving registration page from {index_path}")
+            
+            # Read the file and send it directly
+            with open(index_path, 'r') as f:
+                content = f.read()
+            
+            response = app.response_class(
+                response=content,
+                status=200,
+                mimetype='text/html'
+            )
+            
+            # Set headers to prevent caching
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
+            return response
+        else:
+            print("No index.html found, redirecting to root")
+            return redirect('/')
+            
+    except Exception as e:
+        print(f"Error serving registration page: {str(e)}")
+        traceback.print_exc()
+        return redirect('/')
 
 if __name__ == '__main__':
     # Get port from environment variable (default to 5001 if not set)
