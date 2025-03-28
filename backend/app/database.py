@@ -43,7 +43,8 @@ class RunDatabase:
         self.cursor = None
         self.conn_thread_id = None
         self.connect()
-            self.init_db()
+        self.init_db()
+
     def connect(self):
         try:
             # Get database URL from environment variable
@@ -332,7 +333,7 @@ class RunDatabase:
                     )
                 """)
                 if not self.cursor.fetchone()[0]:
-                    self.init_db()
+                self.init_db()
             else:
                 # SQLite table check
                 self.cursor.execute("""
@@ -340,7 +341,7 @@ class RunDatabase:
                     WHERE type='table' AND name='users'
                 """)
                 if not self.cursor.fetchone():
-                    self.init_db()
+                self.init_db()
         except Exception as e:
             print(f"Error ensuring tables: {e}")
             self.conn.rollback()
