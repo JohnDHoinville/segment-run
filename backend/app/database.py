@@ -107,7 +107,7 @@ class RunDatabase:
                 
             # Test the connection
             try:
-                if isinstance(self.conn, psycopg2.extensions.connection):
+                if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                     self.cursor.execute("SELECT 1")
                 else:
                     self.cursor.execute("SELECT 1")
@@ -116,7 +116,7 @@ class RunDatabase:
                 print(f"Database connection test failed: {str(test_error)}")
                 traceback.print_exc()
                 # If the connection test fails, try to reconnect or refresh
-                if isinstance(self.conn, psycopg2.extensions.connection):
+                if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                     try:
                         self.conn.close()
                         # Simplest fallback - connect to SQLite instead
@@ -132,7 +132,7 @@ class RunDatabase:
             self.conn_thread_id = threading.get_ident()
             
             # Print database type confirmation
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 print("Using PostgreSQL database")
             else:
                 print("Using SQLite database")
@@ -425,7 +425,7 @@ class RunDatabase:
             print(f"  JSON data size: {len(data_json) if data_json else 0} bytes")
             
             # Check database type
-            using_postgres = isinstance(self.conn, psycopg2.extensions.connection)
+            using_postgres = POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection)
             print(f"Database type: {'PostgreSQL' if using_postgres else 'SQLite'}")
             
             if using_postgres:
@@ -583,7 +583,7 @@ class RunDatabase:
             
             try:
                 # Additional roll back if outer transaction exists
-                if isinstance(self.conn, psycopg2.extensions.connection):
+                if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                     self.conn.rollback()
                     print("Outer transaction rolled back (PostgreSQL)")
                 else:
@@ -609,7 +609,7 @@ class RunDatabase:
             
             # Use a try-except block to handle query issues
             try:
-                if isinstance(self.conn, psycopg2.extensions.connection):
+                if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                     # PostgreSQL query
                     self.cursor.execute("""
                         SELECT id, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit
@@ -686,7 +686,7 @@ class RunDatabase:
 
     def get_run_by_id(self, run_id, user_id=None):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 if user_id:
                     self.cursor.execute("""
@@ -719,7 +719,7 @@ class RunDatabase:
 
     def get_recent_runs(self, user_id, limit=5):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
                     SELECT * FROM runs 
@@ -744,7 +744,7 @@ class RunDatabase:
 
     def delete_run(self, run_id):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL delete
                 self.cursor.execute("""
                     DELETE FROM runs 
@@ -776,7 +776,7 @@ class RunDatabase:
             
             print(f"Saving profile: user_id={user_id}, age={age}, resting_hr={resting_hr}, weight={weight}, gender={gender}")
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL save/update
                 self.cursor.execute("""
                     INSERT INTO profiles (user_id, age, resting_hr, weight, gender)
@@ -807,7 +807,7 @@ class RunDatabase:
             # Check if we need to reconnect
             self.check_connection()
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
                     SELECT * FROM profiles 
@@ -865,7 +865,7 @@ class RunDatabase:
     def create_user(self, username, password):
         try:
             password_hash = generate_password_hash(password)
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL insert
                 self.cursor.execute("""
                     INSERT INTO users (username, password_hash)
@@ -890,7 +890,7 @@ class RunDatabase:
             # Check if we need to reconnect
             self.check_connection()
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
                     SELECT id, password_hash FROM users WHERE username = %s
@@ -916,7 +916,7 @@ class RunDatabase:
 
     def update_password(self, user_id, current_password, new_password):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
                     SELECT password_hash FROM users 
@@ -931,7 +931,7 @@ class RunDatabase:
             user = self.cursor.fetchone()
             if user and check_password_hash(user['password_hash'], current_password):
                 new_hash = generate_password_hash(new_password)
-                if isinstance(self.conn, psycopg2.extensions.connection):
+                if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                     # PostgreSQL update
                     self.cursor.execute("""
                         UPDATE users 
@@ -955,7 +955,7 @@ class RunDatabase:
 
     def add_run(self, user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit=None):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL insert
                 self.cursor.execute("""
                     INSERT INTO runs (user_id, date, data, total_distance, avg_pace, avg_hr, pace_limit)
@@ -977,7 +977,7 @@ class RunDatabase:
 
     def get_run(self, run_id, user_id):
         try:
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
                     SELECT * FROM runs 
@@ -1001,7 +1001,7 @@ class RunDatabase:
             # Check if we need to reconnect
             self.check_connection()
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
                     SELECT id, username, password_hash FROM users WHERE id = %s
@@ -1030,7 +1030,7 @@ class RunDatabase:
             # Check if we need to reconnect
             self.check_connection()
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL query
                 self.cursor.execute("""
                     SELECT id, username, password_hash FROM users WHERE username = %s
@@ -1062,7 +1062,7 @@ class RunDatabase:
             # Hash the password
             password_hash = generate_password_hash(password)
             
-            if isinstance(self.conn, psycopg2.extensions.connection):
+            if POSTGRES_AVAILABLE and isinstance(self.conn, psycopg2.extensions.connection):
                 # PostgreSQL insert
                 self.cursor.execute("""
                     INSERT INTO users (username, password_hash, email)
