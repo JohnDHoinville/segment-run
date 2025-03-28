@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "pip install -r backend/requirements.txt",
+    "build": "pip install -r backend/requirements.txt && cd backend && python create_logos.py",
     "start": "cd backend && python server_render.py"
   },
   "engines": {

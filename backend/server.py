@@ -127,93 +127,92 @@ def serve_static(filename):
         print(f"Requested file: {filename}")
         print(f"Current working directory: {os.getcwd()}")
         
-        # Get origin for CORS
-        origin = request.headers.get('Origin', '')
-        
         # Set CORS headers 
         headers = {
             'Cache-Control': 'public, max-age=31536000',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': 'true',
             'Vary': 'Origin'
         }
         
-        if origin in ALLOWED_ORIGINS or '*' in ALLOWED_ORIGINS:
-            headers['Access-Control-Allow-Origin'] = origin
-        else:
-            headers['Access-Control-Allow-Origin'] = 'https://gpx4u.com'
-            
-        headers['Access-Control-Allow-Credentials'] = 'true'
-        
-        # Add content type based on file extension
+        # Handle specific content types
         if filename.endswith('.js'):
-            print(f"Setting Content-Type for JS file")
             headers['Content-Type'] = 'application/javascript'
         elif filename.endswith('.css'):
-            print(f"Setting Content-Type for CSS file")
             headers['Content-Type'] = 'text/css'
         elif filename.endswith('.png'):
             headers['Content-Type'] = 'image/png'
         elif filename.endswith('.svg'):
             headers['Content-Type'] = 'image/svg+xml'
+        elif filename.endswith('.json'):
+            headers['Content-Type'] = 'application/json'
             
-        # Special case for the JS and CSS files we're having issues with
-        if filename == 'js/main.4f93416e.js':
-            return serve_main_js()
-        elif filename == 'css/main.42f26821.css':
-            return serve_main_css()
-        elif filename == 'js/488.7dee82e4.chunk.js':
-            return serve_chunk_js()
-            
-        # List all paths we're going to check
-        paths_to_check = [
-            os.path.join('static', filename),
-            os.path.join('static/js', filename if not filename.startswith('js/') else filename[3:]),
-            os.path.join('static/css', filename if not filename.startswith('css/') else filename[4:]),
-            os.path.join('backend/static', filename),
-            os.path.join('backend/static/js', filename if not filename.startswith('js/') else filename[3:]),
-            os.path.join('backend/static/css', filename if not filename.startswith('css/') else filename[4:]),
-            os.path.join('/app/backend/static', filename),
-            os.path.join('/app/backend/static/js', filename if not filename.startswith('js/') else filename[3:]),
-            os.path.join('/app/backend/static/css', filename if not filename.startswith('css/') else filename[4:]),
-            os.path.join('/app/static', filename),
-            os.path.join('/app/static/js', filename if not filename.startswith('js/') else filename[3:]),
-            os.path.join('/app/static/css', filename if not filename.startswith('css/') else filename[4:])
+        # Search paths in order of preference
+        search_dirs = [
+            'static',
+            'backend/static',
+            os.path.join(os.getcwd(), 'static'),
+            os.path.join(os.getcwd(), 'backend/static')
         ]
         
-        print(f"Paths to check: {paths_to_check}")
-        
-        # Check if the file exists in any of our paths
-        for path in paths_to_check:
-            if os.path.exists(path):
-                print(f"File found at: {path}")
-                dir_path, file_name = os.path.split(path)
-                print(f"Serving {file_name} from {dir_path} with headers: {headers}")
-                return send_from_directory(dir_path, file_name, headers=headers)
+        # For JS and CSS files, check subdirectories too
+        if filename.startswith('js/') or filename.startswith('css/'):
+            # Split path to get the directory and actual filename
+            parts = filename.split('/')
+            if len(parts) > 1:
+                subdir = parts[0]  # 'js' or 'css'
+                file_name = parts[-1]  # Just the filename without path
                 
-        # If we get here, file was not found
-        print(f"File not found: {filename}")
-        print(f"Static dir contents: {os.listdir('static') if os.path.exists('static') else 'directory not found'}")
-        if os.path.exists('static/js'):
-            print(f"JS dir contents: {os.listdir('static/js')}")
-        if os.path.exists('static/css'):
-            print(f"CSS dir contents: {os.listdir('static/css')}")
+                # Add specific subdirectory paths
+                search_dirs.extend([
+                    os.path.join('static', subdir),
+                    os.path.join('backend/static', subdir)
+                ])
+                
+                # Try to serve the file directly from subdirectories
+                for search_dir in search_dirs:
+                    file_path = os.path.join(search_dir, file_name)
+                    if os.path.exists(file_path):
+                        print(f"Found file at: {file_path}")
+                        return send_from_directory(os.path.dirname(file_path), os.path.basename(file_path), headers=headers)
+        
+        # Try each search directory for the full path
+        for search_dir in search_dirs:
+            file_path = os.path.join(search_dir, filename)
+            if os.path.exists(file_path):
+                print(f"Found file at: {file_path}")
+                return send_from_directory(os.path.dirname(file_path), os.path.basename(file_path), headers=headers)
             
-        # As a last resort, try to find a file with a similar name
-        print("Checking for files with similar names...")
-        js_files = os.listdir('static/js') if os.path.exists('static/js') else []
-        css_files = os.listdir('static/css') if os.path.exists('static/css') else []
+        # If still not found, check for similar filenames in js and css directories
+        if filename.endswith('.js'):
+            js_dir = os.path.join('backend/static/js')
+            if os.path.exists(js_dir):
+                base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.4908f7be.js'
+                for file in os.listdir(js_dir):
+                    if file.startswith(f"{base_name}.") and file.endswith('.js'):
+                        print(f"Found similar JS file: {file}")
+                        return send_from_directory(js_dir, file, headers=headers)
+                        
+        if filename.endswith('.css'):
+            css_dir = os.path.join('backend/static/css')
+            if os.path.exists(css_dir):
+                base_name = os.path.basename(filename).split('.')[0]  # e.g., 'main' from 'main.42f26821.css'
+                for file in os.listdir(css_dir):
+                    if file.startswith(f"{base_name}.") and file.endswith('.css'):
+                        print(f"Found similar CSS file: {file}")
+                        return send_from_directory(css_dir, file, headers=headers)
         
-        # Log all JS and CSS files we have
-        print(f"All JS files: {js_files}")
-        print(f"All CSS files: {css_files}")
+        # Log if file not found
+        print(f"File not found: {filename}")
+        print(f"Search directories: {search_dirs}")
+        if os.path.exists('backend/static'):
+            print(f"Files in backend/static: {os.listdir('backend/static')}")
+        if os.path.exists('backend/static/js'):
+            print(f"Files in backend/static/js: {os.listdir('backend/static/js')}")
+        if os.path.exists('backend/static/css'):
+            print(f"Files in backend/static/css: {os.listdir('backend/static/css')}")
         
-        # Return a 404 with helpful error info
-        return jsonify({
-            "error": "File not found", 
-            "file": filename,
-            "paths_checked": paths_to_check,
-            "available_js": js_files,
-            "available_css": css_files
-        }), 404
+        return jsonify({"error": f"File not found: {filename}"}), 404
             
     except Exception as e:
         print(f"Error serving static file {filename}: {str(e)}")
@@ -960,40 +959,43 @@ def favicon():
         )
 
 @app.route('/manifest.json')
-def serve_manifest_json():
-    """Serve a valid manifest.json file for the web application."""
+def serve_manifest():
     try:
-        from manifest_server import get_manifest_json
-        content = get_manifest_json()
+        print("Serving manifest.json")
         
-        response = app.response_class(
-            response=content,
-            status=200,
-            mimetype='application/json'
-        )
-        
-        # Set proper headers for caching
-        response.headers['Cache-Control'] = 'public, max-age=31536000'
-        return response
-        
-    except Exception as e:
-        print(f"Error serving manifest.json: {str(e)}")
-        traceback.print_exc()
-        
-        # Return a minimal valid manifest as fallback
-        minimal_manifest = {
+        # Create a basic manifest
+        manifest = {
             "short_name": "GPX4U",
             "name": "GPX4U Running Analysis",
-            "icons": [],
-            "start_url": ".",
+            "icons": [
+                {
+                    "src": "/logo192.png",
+                    "type": "image/png",
+                    "sizes": "192x192"
+                },
+                {
+                    "src": "/logo512.png",
+                    "type": "image/png",
+                    "sizes": "512x512"
+                }
+            ],
+            "start_url": "/",
             "display": "standalone",
-            "theme_color": "#000000",
+            "theme_color": "#4285f4",
             "background_color": "#ffffff"
         }
         
-        response = jsonify(minimal_manifest)
-        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        response = jsonify(manifest)
+        response.headers.set('Content-Type', 'application/json')
+        response.headers.set('Cache-Control', 'public, max-age=86400')
         return response
+    except Exception as e:
+        print(f"Error serving manifest.json: {e}")
+        return jsonify({
+            "short_name": "GPX4U",
+            "name": "GPX4U Running Analysis",
+            "start_url": "."
+        })
 
 @app.route('/robots.txt')
 def serve_robots_txt():
@@ -1035,39 +1037,91 @@ def serve_robots_txt():
         return response
 
 @app.route('/logo192.png')
-@app.route('/logo512.png')
-def serve_logo_files():
-    """Serve the logo files."""
+def serve_logo192():
     try:
-        # Get the filename from the request path
-        filename = request.path.lstrip('/')
-        
-        # List of possible paths to check
-        paths_to_check = [
-            os.path.join('static', filename),
-            os.path.join('backend/static', filename),
-            os.path.join('/app/backend/static', filename),
-            os.path.join('/app/static', filename)
+        print("Serving logo192.png")
+        search_paths = [
+            'static/logo192.png',
+            'backend/static/logo192.png',
+            os.path.join(os.getcwd(), 'static/logo192.png'),
+            os.path.join(os.getcwd(), 'backend/static/logo192.png')
         ]
         
-        # Try each path until we find the file
-        for path in paths_to_check:
+        for path in search_paths:
             if os.path.exists(path):
-                dir_path, file_name = os.path.split(path)
-                response = send_from_directory(dir_path, file_name)
-                response.headers['Cache-Control'] = 'public, max-age=31536000'
-                return response
-                
-        # If we get here, return a 204 No Content
+                print(f"Found logo at: {path}")
+                return send_from_directory(os.path.dirname(path), os.path.basename(path), 
+                                          mimetype='image/png')
+        
+        # If logo is not found, generate a simple placeholder logo
+        print("Generating placeholder logo")
+        from PIL import Image, ImageDraw
+        import io
+        
+        # Create a 192x192 image with blue background
+        img = Image.new('RGB', (192, 192), color=(66, 133, 244))
+        draw = ImageDraw.Draw(img)
+        
+        # Draw a white circle
+        draw.ellipse((48, 48, 144, 144), fill=(255, 255, 255))
+        
+        # Convert to bytes
+        img_io = io.BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+        
+        # Create a response with the image
+        response = make_response(img_io.getvalue())
+        response.headers.set('Content-Type', 'image/png')
+        return response
+    except Exception as e:
+        print(f"Error serving logo192.png: {e}")
+        # Return a 204 No Content on error
         return app.response_class(
             response='',
             status=204
         )
+
+@app.route('/logo512.png')
+def serve_logo512():
+    try:
+        print("Serving logo512.png")
+        search_paths = [
+            'static/logo512.png',
+            'backend/static/logo512.png',
+            os.path.join(os.getcwd(), 'static/logo512.png'),
+            os.path.join(os.getcwd(), 'backend/static/logo512.png')
+        ]
         
+        for path in search_paths:
+            if os.path.exists(path):
+                print(f"Found logo at: {path}")
+                return send_from_directory(os.path.dirname(path), os.path.basename(path), 
+                                          mimetype='image/png')
+        
+        # If logo is not found, generate a simple placeholder logo
+        print("Generating placeholder logo")
+        from PIL import Image, ImageDraw
+        import io
+        
+        # Create a 512x512 image with blue background
+        img = Image.new('RGB', (512, 512), color=(66, 133, 244))
+        draw = ImageDraw.Draw(img)
+        
+        # Draw a white circle
+        draw.ellipse((128, 128, 384, 384), fill=(255, 255, 255))
+        
+        # Convert to bytes
+        img_io = io.BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+        
+        # Create a response with the image
+        response = make_response(img_io.getvalue())
+        response.headers.set('Content-Type', 'image/png')
+        return response
     except Exception as e:
-        print(f"Error serving logo file: {str(e)}")
-        traceback.print_exc()
-        
+        print(f"Error serving logo512.png: {e}")
         # Return a 204 No Content on error
         return app.response_class(
             response='',
