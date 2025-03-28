@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "cd backend && python server.py",
-    "build": "cd frontend && npm install && npm run build",
+    "build": "echo \"No frontend build required\"",
     "postinstall": "cd backend && pip install -r requirements.txt"
   },
   "engines": {

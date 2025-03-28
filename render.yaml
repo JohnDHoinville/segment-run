@@ -2,11 +2,13 @@ services:
   - type: web
     name: gpx4u
     env: python
-    buildCommand: npm install && npm run build
+    buildCommand: cd backend && pip install -r requirements.txt
     startCommand: cd backend && gunicorn fixed_server:app
     envVars:
       - key: FLASK_ENV
         value: production
       - key: PYTHONPATH
         value: /app/backend
+      - key: SECRET_KEY
+        generateValue: true
 
