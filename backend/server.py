@@ -596,8 +596,8 @@ def analyze():
         # Try to get the profile with a direct connection check
         profile = None
         try:
-            profile = db.get_profile(session['user_id'])
-            print("\nProfile data:", profile)
+        profile = db.get_profile(session['user_id'])
+        print("\nProfile data:", profile)
         except Exception as profile_error:
             print(f"Error getting profile: {str(profile_error)}")
             # Create default profile if fetch fails
@@ -2048,7 +2048,19 @@ def get_runs_api():
                         'id': run_id,
                         'date': run_date,
                         'distance': run_distance or 0,
-                        'data': run_data
+                        'data': run_data,
+                        'total_distance': run_distance or 0, # Add explicit total_distance field for React components
+                        'fast_distance': run_data.get('fast_distance', 0) if run_data else 0,
+                        'slow_distance': run_data.get('slow_distance', 0) if run_data else 0,
+                        'avg_pace': run_data.get('avg_pace', 0) if run_data else 0,
+                        'avg_hr': run_data.get('avg_hr_all', 0) if run_data else 0,
+                        'pace_limit': run_data.get('pace_limit', 10) if run_data else 10,
+                        'fast_segments': run_data.get('fast_segments', []) if run_data else [],
+                        'slow_segments': run_data.get('slow_segments', []) if run_data else [],
+                        'mile_splits': run_data.get('mile_splits', []) if run_data else [],
+                        'elevation_data': run_data.get('elevation_data', []) if run_data else [],
+                        'percentage_fast': run_data.get('percentage_fast', 0) if run_data else 0,
+                        'percentage_slow': run_data.get('percentage_slow', 0) if run_data else 0
                     }
                     formatted_runs.append(formatted_run)
                 except Exception as run_error:
@@ -2133,7 +2145,19 @@ def get_runs_api():
                             'id': run_id,
                             'date': run_date,
                             'distance': run_distance or 0,
-                            'data': run_data
+                            'data': run_data,
+                            'total_distance': run_distance or 0, # Add explicit total_distance field for React components
+                            'fast_distance': run_data.get('fast_distance', 0) if run_data else 0,
+                            'slow_distance': run_data.get('slow_distance', 0) if run_data else 0,
+                            'avg_pace': run_data.get('avg_pace', 0) if run_data else 0,
+                            'avg_hr': run_data.get('avg_hr_all', 0) if run_data else 0,
+                            'pace_limit': run_data.get('pace_limit', 10) if run_data else 10,
+                            'fast_segments': run_data.get('fast_segments', []) if run_data else [],
+                            'slow_segments': run_data.get('slow_segments', []) if run_data else [],
+                            'mile_splits': run_data.get('mile_splits', []) if run_data else [],
+                            'elevation_data': run_data.get('elevation_data', []) if run_data else [],
+                            'percentage_fast': run_data.get('percentage_fast', 0) if run_data else 0,
+                            'percentage_slow': run_data.get('percentage_slow', 0) if run_data else 0
                         }
                         formatted_runs.append(formatted_run)
                     except Exception as inner_run_error:
@@ -2685,9 +2709,9 @@ if __name__ == '__main__':
         )
     else:
         print(f"Starting development server on http://localhost:{port}")
-        app.run(
-            debug=True,
-            host='localhost',
+    app.run(
+        debug=True,
+        host='localhost',
             port=port,
-            ssl_context=None
-        ) 
+        ssl_context=None
+    ) 

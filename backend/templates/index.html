@@ -19,6 +19,7 @@
           crossorigin=""></script>
     <!-- Include Chart.js for visualizations -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Serve the React components from the appropriate build directory -->
     <script defer="defer" src="/static/js/main.4908f7be.js"></script>
     <style>
         body { 
@@ -592,6 +593,9 @@
                         </form>
                     </div>
                     
+                    <!-- React app mount point for components -->
+                    <div id="react-components"></div>
+                    
                     <div id="run-list-container">
                         <h4>Recent Runs</h4>
                         <div id="run-list"></div>
@@ -1057,15 +1061,8 @@
                 modalContent.style.maxHeight = '90%';
                 modalContent.style.overflow = 'auto';
                 
-                // Close button
-                const closeButton = document.createElement('button');
-                closeButton.textContent = 'Close';
-                closeButton.className = 'login-button';
-                closeButton.style.width = 'auto';
-                closeButton.style.marginTop = '15px';
-                closeButton.addEventListener('click', () => {
-                    document.body.removeChild(modal);
-                });
+                // Create an ID for the React components container
+                const reactContainerId = `react-components-${run.id}`;
                 
                 // Format run details
                 let runDetails = '';
@@ -1142,6 +1139,9 @@
                         runDetails += `</div>`; // End run-stats-summary
                     }
                     runDetails += `</div>`; // End run-detail-section
+                    
+                    // Add container for React components
+                    runDetails += `<div id="${reactContainerId}" class="react-components-container"></div>`;
                     
                     // Prepare route map data
                     const hasRouteData = data.fast_segments && data.fast_segments.length > 0 && 
@@ -1268,6 +1268,16 @@
                     }
                 }
                 
+                // Close button
+                const closeButton = document.createElement('button');
+                closeButton.textContent = 'Close';
+                closeButton.className = 'login-button';
+                closeButton.style.width = 'auto';
+                closeButton.style.marginTop = '15px';
+                closeButton.addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                });
+                
                 modalContent.innerHTML = runDetails;
                 modalContent.appendChild(closeButton);
                 modal.appendChild(modalContent);
@@ -1280,6 +1290,20 @@
                     }
                 });
                 
+                // Initialize charts, map, and React components
+                initializeComponents(run, reactContainerId);
+            }
+            
+            function initializeComponents(run, containerId) {
+                // Initialize maps and charts first
+                initializeMap(run);
+                initializeCharts(run);
+                
+                // TODO: If you have the React components available, you could initialize them here
+                // by passing the run data to your global React app
+            }
+            
+            function initializeMap(run) {
                 // Initialize map if we have route data
                 if (run.data && run.data.fast_segments && run.data.fast_segments.length > 0 && 
                     run.data.fast_segments[0].coordinates && run.data.fast_segments[0].coordinates.length > 0) {
@@ -1335,7 +1359,9 @@
                         }
                     }, 100);
                 }
-                
+            }
+            
+            function initializeCharts(run) {
                 // Initialize elevation chart if available
                 if (run.data && run.data.elevation_data && run.data.elevation_data.length > 0) {
                     setTimeout(() => {
@@ -1381,6 +1407,12 @@
                     }, 100);
                 }
                 
+                // Initialize pace and HR charts
+                initializePaceChart(run);
+                initializeHeartRateChart(run);
+            }
+            
+            function initializePaceChart(run) {
                 // Initialize pace chart
                 if (run.data && run.data.fast_segments && run.data.slow_segments && 
                     (run.data.fast_segments.length > 0 || run.data.slow_segments.length > 0)) {
@@ -1444,72 +1476,76 @@
                                 }
                             });
                         }
+                    }, 100);
+                }
+            }
+            
+            function initializeHeartRateChart(run) {
+                // Initialize heart rate chart if we have HR data
+                setTimeout(() => {
+                    const hrChartElement = document.getElementById('hr-chart');
+                    if (hrChartElement && run.data) {
+                        const allSegments = [
+                            ...(run.data.fast_segments || []).map(s => ({ ...s, type: 'fast' })),
+                            ...(run.data.slow_segments || []).map(s => ({ ...s, type: 'slow' }))
+                        ];
                         
-                        // Initialize heart rate chart if we have HR data
-                        const hrChartElement = document.getElementById('hr-chart');
-                        if (hrChartElement) {
-                            const allSegments = [
-                                ...(run.data.fast_segments || []).map(s => ({ ...s, type: 'fast' })),
-                                ...(run.data.slow_segments || []).map(s => ({ ...s, type: 'slow' }))
-                            ];
-                            
-                            // Sort segments by distance/time order
-                            allSegments.sort((a, b) => {
-                                if (a.start_time && b.start_time) {
-                                    return new Date(a.start_time) - new Date(b.start_time);
+                        // Sort segments by distance/time order
+                        allSegments.sort((a, b) => {
+                            if (a.start_time && b.start_time) {
+                                return new Date(a.start_time) - new Date(b.start_time);
+                            }
+                            return 0;
+                        });
+                        
+                        // Check if we have HR data
+                        const hasHrData = allSegments.some(s => s.avg_hr);
+                        
+                        if (hasHrData) {
+                            // Prepare data
+                            const labels = allSegments.map((segment, index) => `Segment ${index + 1}`);
+                            const hrData = allSegments.map(segment => {
+                                if (segment.avg_hr && isFinite(segment.avg_hr)) {
+                                    return segment.avg_hr;
                                 }
-                                return 0;
+                                return null;
                             });
                             
-                            // Check if we have HR data
-                            const hasHrData = allSegments.some(s => s.avg_hr);
+                            const backgroundColor = allSegments.map(segment =>
+                                segment.type === 'fast' ? 'rgba(76, 175, 80, 0.5)' : 'rgba(255, 82, 82, 0.5)'
+                            );
                             
-                            if (hasHrData) {
-                                // Prepare data
-                                const labels = allSegments.map((segment, index) => `Segment ${index + 1}`);
-                                const hrData = allSegments.map(segment => {
-                                    if (segment.avg_hr && isFinite(segment.avg_hr)) {
-                                        return segment.avg_hr;
-                                    }
-                                    return null;
-                                });
-                                
-                                const backgroundColor = allSegments.map(segment =>
-                                    segment.type === 'fast' ? 'rgba(76, 175, 80, 0.5)' : 'rgba(255, 82, 82, 0.5)'
-                                );
-                                
-                                const borderColor = allSegments.map(segment =>
-                                    segment.type === 'fast' ? 'rgba(76, 175, 80, 1)' : 'rgba(255, 82, 82, 1)'
-                                );
-                                
-                                new Chart(hrChartElement, {
-                                    type: 'bar',
-                                    data: {
-                                        labels: labels,
-                                        datasets: [{
-                                            label: 'Heart Rate (bpm)',
-                                            data: hrData,
-                                            backgroundColor: backgroundColor,
-                                            borderColor: borderColor,
-                                            borderWidth: 1
-                                        }]
-                                    },
-                                    options: {
-                                        responsive: true,
-                                        scales: {
-                                            y: {
-                                                title: {
-                                                    display: true,
-                                                    text: 'Heart Rate (bpm)'
-                                                }
+                            const borderColor = allSegments.map(segment =>
+                                segment.type === 'fast' ? 'rgba(76, 175, 80, 1)' : 'rgba(255, 82, 82, 1)'
+                            );
+                            
+                            new Chart(hrChartElement, {
+                                type: 'bar',
+                                data: {
+                                    labels: labels,
+                                    datasets: [{
+                                        label: 'Heart Rate (bpm)',
+                                        data: hrData,
+                                        backgroundColor: backgroundColor,
+                                        borderColor: borderColor,
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    scales: {
+                                        y: {
+                                            title: {
+                                                display: true,
+                                                text: 'Heart Rate (bpm)'
                                             }
                                         }
                                     }
-                                });
-                            }
+                                }
+                            });
                         }
-                    }, 100);
-                }
+                    }
+                }, 100);
             }
             
             function formatDate(dateString) {
