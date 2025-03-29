@@ -1,0 +1,1784 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <link rel="icon" href="/static/favicon.ico"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="theme-color" content="#4285f4"/>
+    <meta name="description" content="GPX4U - Running Analysis Application"/>
+    <link rel="apple-touch-icon" href="/static/logo192.png"/>
+    <link rel="manifest" href="/manifest.json"/>
+    <title>GPX4U Running Analysis</title>
+    <!-- Include Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <!-- Include Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+    <!-- Include Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Serve the React components from the appropriate build directory -->
+    <script defer="defer" src="/static/js/main.4908f7be.js"></script>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            margin: 0; 
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #333;
+            height: 100vh;
+            width: 100%;
+        }
+        #root {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .app {
+            flex: 1;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background-color: #4285f4;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 30px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        h1 { margin: 0; }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            flex: 1;
+        }
+        /* Additional styling for login form */
+        .login-container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .login-box {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        .login-box:hover {
+            box-shadow: 0 5px 25px rgba(0,0,0,0.15);
+        }
+        .login-subtitle {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        .login-form {
+            margin-top: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+            transition: color 0.3s ease;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #4285f4;
+            box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+        }
+        .login-button {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 12px 15px;
+            border-radius: 4px;
+            width: 100%;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s ease;
+        }
+        .login-button:hover {
+            background-color: #3367d6;
+        }
+        .login-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .login-footer {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .toggle-auth-button {
+            background: none;
+            border: none;
+            color: #4285f4;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .toggle-auth-button:hover {
+            text-decoration: underline;
+            background-color: rgba(66, 133, 244, 0.1);
+        }
+        .hidden {
+            display: none;
+        }
+        #user-info {
+            background-color: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        #logout-button {
+            width: auto;
+            padding: 8px 15px;
+            margin-top: 0;
+        }
+        
+        /* Run data styling */
+        #run-stats-summary {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        
+        .stat-box {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            flex-basis: 30%;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        #run-list {
+            margin-top: 15px;
+        }
+        
+        .run-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .run-item-date {
+            font-weight: bold;
+            flex-basis: 20%;
+        }
+        
+        .run-item-distance {
+            flex-basis: 20%;
+        }
+        
+        .run-item-pace {
+            flex-basis: 20%;
+        }
+        
+        .run-item-actions {
+            flex-basis: 20%;
+            text-align: right;
+        }
+        
+        .view-run-button {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .view-run-button:hover {
+            background-color: #3367d6;
+        }
+        
+        /* Upload form styling */
+        #upload-container {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        
+        #upload-form .form-group {
+            margin-bottom: 10px;
+        }
+        
+        #upload-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        #upload-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        #upload-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        #upload-message.info {
+            background-color: #e2f0fb;
+            color: #0c5460;
+        }
+        
+        #upload-button {
+            margin-top: 10px;
+        }
+        
+        /* Tooltip styling */
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        
+        .tooltip-container .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.8rem;
+        }
+        
+        .tooltip-container .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #555 transparent transparent transparent;
+        }
+        
+        .tooltip-container:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* Form layout */
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -10px;
+        }
+        
+        .half-width {
+            flex: 0 0 calc(50% - 20px);
+            margin: 0 10px;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+        
+        .cancel-button {
+            background-color: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .cancel-button:hover {
+            background-color: #e5e5e5;
+        }
+
+        /* Map styling */
+        .map-container {
+            height: 400px;
+            width: 100%;
+            margin: 20px 0;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* Charts styling */
+        .chart-container {
+            margin: 20px 0;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .chart-title {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+            color: #333;
+        }
+
+        /* Run detail styling */
+        .run-detail {
+            margin: 20px 0;
+        }
+
+        .run-detail-section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .segment-list {
+            margin: 10px 0;
+        }
+
+        .segment-item {
+            background-color: #f8f9fa;
+            padding: 10px 15px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+
+        .segment-item.fast {
+            border-left: 4px solid #4CAF50;
+        }
+
+        .segment-item.slow {
+            border-left: 4px solid #FF5252;
+        }
+
+        .segment-data {
+            margin-left: 15px;
+            flex: 1;
+        }
+        
+        /* Progress bar */
+        .progress-container {
+            height: 10px;
+            width: 100%;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background-color: #4285f4;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        
+        /* Run summary styling */
+        .run-summary {
+            margin: 20px 0;
+        }
+        
+        .run-summary h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            color: #333;
+        }
+        
+        /* View more button */
+        .view-more-runs {
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .view-all-button {
+            background-color: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .view-all-button:hover {
+            background-color: #e5e5e5;
+        }
+    </style>
+</head>
+<body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root">
+        <div class="app">
+            <div class="header">
+                <h1>GPX4U Running Analysis</h1>
+            </div>
+            
+            <!-- Auth Container - For login and registration -->
+            <div id="auth-container" class="login-container">
+                <div id="login-box" class="login-box">
+                    <h2 id="auth-title">Welcome Back</h2>
+                    <p id="auth-subtitle" class="login-subtitle">
+                        Sign in to access your running analytics
+                    </p>
+                    
+                    <div id="auth-error" class="login-error hidden"></div>
+                    
+                    <form id="auth-form" class="login-form">
+                        <div class="form-group">
+                            <label for="username">Username</label>
+                            <input
+                              type="text"
+                              id="username"
+                              name="username"
+                              required
+                              autocomplete="username"
+                              autofocus
+                            />
+                        </div>
+                        
+                        <div id="email-group" class="form-group hidden">
+                            <label for="email">Email</label>
+                            <input
+                              type="email"
+                              id="email"
+                              name="email"
+                              autocomplete="email"
+                            />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="password">Password</label>
+                            <input
+                              type="password"
+                              id="password"
+                              name="password"
+                              required
+                              autocomplete="current-password"
+                            />
+                        </div>
+                        
+                        <button type="submit" id="submit-button" class="login-button">
+                            Sign In
+                        </button>
+                    </form>
+                    
+                    <div class="login-footer">
+                        <button 
+                            id="toggle-auth-button"
+                            class="toggle-auth-button"
+                        >
+                            Need an account? Create one
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main app content - shown after login -->
+            <div id="app-container" class="container hidden">
+                <h2>Welcome to GPX4U</h2>
+                <p id="loading-message">Your running data is loading...</p>
+                <div id="run-data-container" class="hidden">
+                    <h3>Your Running History</h3>
+                    <div id="run-stats-summary">
+                        <div class="stat-box">
+                            <strong>Total Runs:</strong> <span id="total-runs">0</span>
+                        </div>
+                        <div class="stat-box">
+                            <strong>Total Distance:</strong> <span id="total-distance">0</span> miles
+                        </div>
+                        <div class="stat-box">
+                            <strong>Last Run:</strong> <span id="last-run-date">None</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Upload GPX form -->
+                    <div id="upload-container">
+                        <h4>Upload New Run</h4>
+                        <form id="upload-form" enctype="multipart/form-data">
+                            <div class="form-group">
+                                <label for="gpx-file">GPX File:</label>
+                                <input type="file" id="gpx-file" name="file" accept=".gpx" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pace-limit">Pace Limit (min/mile):</label>
+                                <div class="tooltip-container">
+                                    <input type="number" id="pace-limit" name="paceLimit" min="0" step="0.1" value="8.0">
+                                    <span class="tooltip-text">Threshold pace that separates fast from slow segments</span>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group half-width">
+                                    <label for="user-age">Age (optional):</label>
+                                    <input type="number" id="user-age" name="age" min="0" max="120">
+                                </div>
+                                <div class="form-group half-width">
+                                    <label for="resting-hr">Resting HR (optional):</label>
+                                    <input type="number" id="resting-hr" name="restingHR" min="0" max="200">
+                                </div>
+                            </div>
+                            <div id="upload-message" class="hidden"></div>
+                            <div class="form-actions">
+                                <button type="submit" id="upload-button" class="login-button">Upload Run</button>
+                                <button type="button" id="cancel-upload" class="cancel-button">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- React app mount point for components -->
+                    <div id="react-components"></div>
+                    
+                    <div id="run-list-container">
+                        <h4>Recent Runs</h4>
+                        <div id="run-list"></div>
+                    </div>
+                </div>
+                
+                <div id="user-info" class="hidden">
+                    <p>Logged in as: <span id="username-display"></span></p>
+                    <button id="logout-button" class="login-button">Logout</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const authContainer = document.getElementById('auth-container');
+            const appContainer = document.getElementById('app-container');
+            const authForm = document.getElementById('auth-form');
+            const authTitle = document.getElementById('auth-title');
+            const authSubtitle = document.getElementById('auth-subtitle');
+            const submitButton = document.getElementById('submit-button');
+            const toggleAuthButton = document.getElementById('toggle-auth-button');
+            const authError = document.getElementById('auth-error');
+            const emailGroup = document.getElementById('email-group');
+            const usernameInput = document.getElementById('username');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const userInfo = document.getElementById('user-info');
+            const usernameDisplay = document.getElementById('username-display');
+            const logoutButton = document.getElementById('logout-button');
+            
+            // State variables
+            let isRegistering = false;
+            
+            // Check if already logged in
+            checkAuthStatus();
+            
+            // Toggle between login and register
+            toggleAuthButton.addEventListener('click', function() {
+                isRegistering = !isRegistering;
+                
+                if (isRegistering) {
+                    authTitle.textContent = 'Create Account';
+                    authSubtitle.textContent = 'Create an account to start analyzing your runs';
+                    submitButton.textContent = 'Create Account';
+                    toggleAuthButton.textContent = 'Already have an account? Sign In';
+                    emailGroup.classList.remove('hidden');
+                    emailInput.setAttribute('required', 'required');
+                    
+                    // Slight animation effect
+                    const loginBox = document.getElementById('login-box');
+                    loginBox.style.transform = 'translateY(5px)';
+                    setTimeout(() => {
+                        loginBox.style.transform = 'translateY(0)';
+                    }, 200);
+                } else {
+                    authTitle.textContent = 'Welcome Back';
+                    authSubtitle.textContent = 'Sign in to access your running analytics';
+                    submitButton.textContent = 'Sign In';
+                    toggleAuthButton.textContent = 'Need an account? Create one';
+                    emailGroup.classList.add('hidden');
+                    emailInput.removeAttribute('required');
+                    
+                    // Slight animation effect
+                    const loginBox = document.getElementById('login-box');
+                    loginBox.style.transform = 'translateY(5px)';
+                    setTimeout(() => {
+                        loginBox.style.transform = 'translateY(0)';
+                    }, 200);
+                }
+                
+                // Clear the form and errors
+                authForm.reset();
+                authError.classList.add('hidden');
+            });
+            
+            // Handle form submission
+            authForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                authError.classList.add('hidden');
+                
+                // Disable the button during authentication
+                submitButton.disabled = true;
+                submitButton.textContent = isRegistering ? 'Creating Account...' : 'Signing In...';
+                
+                const username = usernameInput.value.trim();
+                const password = passwordInput.value;
+                const email = emailInput.value.trim();
+                
+                if (!username || !password || (isRegistering && !email)) {
+                    showError('Please fill in all required fields');
+                    submitButton.disabled = false;
+                    submitButton.textContent = isRegistering ? 'Create Account' : 'Sign In';
+                    return;
+                }
+                
+                try {
+                    const endpoint = isRegistering ? '/auth/register' : '/auth/login';
+                    const payload = isRegistering 
+                        ? { username, password, email }
+                        : { username, password };
+                        
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Server error');
+                    }
+                    
+                    console.log('Authentication response:', data);
+                    if (data.user_id) {
+                        // Login successful
+                        handleLogin(data.user_id, data.username || username);
+                    } else {
+                        throw new Error('No user ID received from server');
+                    }
+                } catch (error) {
+                    console.error('Authentication error:', error);
+                    showError(error.message || 'Failed to connect to server');
+                    submitButton.disabled = false;
+                    submitButton.textContent = isRegistering ? 'Create Account' : 'Sign In';
+                }
+            });
+            
+            // Logout button handler
+            logoutButton.addEventListener('click', function() {
+                logoutButton.disabled = true;
+                logoutButton.textContent = 'Logging out...';
+                
+                fetch('/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Logout response:', data);
+                    window.location.href = '/'; // Force reload the page after logout
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
+                    window.location.href = '/'; // Reload anyway on error
+                });
+            });
+            
+            // Helper functions
+            function showError(message) {
+                authError.textContent = message;
+                authError.classList.remove('hidden');
+            }
+            
+            function handleLogin(userId, username) {
+                console.log('Login successful:', userId, username);
+                
+                // Show main app container
+                authContainer.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                
+                // Update user info
+                usernameDisplay.textContent = username;
+                userInfo.classList.remove('hidden');
+                
+                // Store in session
+                sessionStorage.setItem('user_id', userId);
+                sessionStorage.setItem('username', username);
+                
+                // Load the run data directly instead of redirecting
+                loadRunData();
+            }
+            
+            function loadRunData() {
+                const loadingMessage = document.getElementById('loading-message');
+                const runDataContainer = document.getElementById('run-data-container');
+                const totalRunsElement = document.getElementById('total-runs');
+                const totalDistanceElement = document.getElementById('total-distance');
+                const lastRunDateElement = document.getElementById('last-run-date');
+                const runListElement = document.getElementById('run-list');
+                
+                // Show loading message
+                loadingMessage.textContent = 'Loading your running data...';
+                loadingMessage.classList.remove('hidden');
+                runDataContainer.classList.add('hidden');
+                
+                // Fetch the run data from the API
+                fetch('/api/runs', {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch run data');
+                    }
+                    return response.json();
+                })
+                .then(runs => {
+                    console.log('Fetched runs:', runs);
+                    
+                    // Helper function to parse pace values that might be "Infinity"
+                    const parsePace = (pace) => {
+                        if (pace === "Infinity" || pace === "inf" || pace === Infinity) {
+                            return "N/A"; // Handle Infinity values
+                        }
+                        return pace;
+                    };
+                    
+                    // Hide loading message and show data container
+                    loadingMessage.classList.add('hidden');
+                    runDataContainer.classList.remove('hidden');
+                    
+                    // Update summary stats
+                    const totalRuns = runs.length;
+                    totalRunsElement.textContent = totalRuns;
+                    
+                    // Calculate total stats
+                    let totalDistance = 0;
+                    let totalFastDistance = 0;
+                    let totalSlowDistance = 0;
+                    let totalElevationGain = 0;
+                    let avgHeartRate = 0;
+                    let hrDataCount = 0;
+                    
+                    runs.forEach(run => {
+                        // Add up distance
+                        totalDistance += parseFloat(run.distance || 0);
+                        
+                        // If we have detailed data, calculate more stats
+                        if (run.data) {
+                            // Fast/Slow distances
+                            if (run.data.fast_distance) totalFastDistance += parseFloat(run.data.fast_distance);
+                            if (run.data.slow_distance) totalSlowDistance += parseFloat(run.data.slow_distance);
+                            
+                            // Elevation
+                            if (run.data.elevation_data && run.data.elevation_data.length > 1) {
+                                // Calculate elevation gain
+                                for (let i = 1; i < run.data.elevation_data.length; i++) {
+                                    const elevDiff = run.data.elevation_data[i].elevation - run.data.elevation_data[i-1].elevation;
+                                    if (elevDiff > 0) totalElevationGain += elevDiff;
+                                }
+                            }
+                            
+                            // Heart rate
+                            if (run.data.avg_hr_all && isFinite(run.data.avg_hr_all)) {
+                                avgHeartRate += parseFloat(run.data.avg_hr_all);
+                                hrDataCount++;
+                            }
+                        }
+                    });
+                    
+                    // Format the totals
+                    totalDistanceElement.textContent = totalDistance.toFixed(2);
+                    
+                    // Add additional summary information
+                    const summaryContainer = document.createElement('div');
+                    summaryContainer.className = 'run-summary';
+                    summaryContainer.innerHTML = `
+                        <h3>Overall Training Summary</h3>
+                        <div class="run-stats-summary">
+                            <div class="stat-box">
+                                <strong>Totals</strong><br>
+                                ${totalRuns} Runs<br>
+                                ${totalDistance.toFixed(2)} miles
+                            </div>
+                            <div class="stat-box">
+                                <strong>Fast/Slow Split</strong><br>
+                                Fast: ${totalFastDistance.toFixed(2)} miles<br>
+                                Slow: ${totalSlowDistance.toFixed(2)} miles
+                            </div>
+                            <div class="stat-box">
+                                <strong>Elevation Gain</strong><br>
+                                ${totalElevationGain.toFixed(0)} feet
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Find the element to insert the summary after
+                    const statsSummary = document.getElementById('run-stats-summary');
+                    if (statsSummary) {
+                        // Insert after the stats summary
+                        statsSummary.parentNode.insertBefore(summaryContainer, statsSummary.nextSibling);
+                    }
+                    
+                    // Get most recent run date
+                    if (totalRuns > 0) {
+                        // Sort runs by date (newest first)
+                        runs.sort((a, b) => new Date(b.date) - new Date(a.date));
+                        const latestRun = runs[0];
+                        lastRunDateElement.textContent = formatDate(latestRun.date);
+                        
+                        // Display the runs in the list
+                        runListElement.innerHTML = '';
+                        
+                        // Show at most 10 most recent runs
+                        const recentRuns = runs.slice(0, 10);
+                        
+                        recentRuns.forEach(run => {
+                            // Calculate pace (mins per mile) if we have distance and time data
+                            let paceDisplay = 'N/A';
+                            if (run.data && run.data.total_distance > 0) {
+                                const runData = run.data;
+                                // Find total time from segments if available
+                                let totalTime = 0;
+                                
+                                if (runData.fast_segments && runData.slow_segments) {
+                                    // Sum up time from all segments
+                                    const allSegments = [...runData.fast_segments, ...runData.slow_segments];
+                                    allSegments.forEach(segment => {
+                                        if (segment.time_diff) {
+                                            totalTime += parseFloat(segment.time_diff);
+                                        }
+                                    });
+                                    
+                                    // Calculate pace in minutes per mile
+                                    if (totalTime > 0) {
+                                        const paceMinutes = totalTime / runData.total_distance;
+                                        // Handle Infinity or very large values
+                                        if (paceMinutes === "Infinity" || paceMinutes === Infinity || 
+                                            isNaN(paceMinutes) || paceMinutes > 1000) {
+                                            paceDisplay = 'N/A';
+                                        } else {
+                                            const paceMinutesWhole = Math.floor(paceMinutes);
+                                            const paceSeconds = Math.round((paceMinutes - paceMinutesWhole) * 60);
+                                            paceDisplay = `${paceMinutesWhole}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Create run item element
+                            const runItem = document.createElement('div');
+                            runItem.className = 'run-item';
+                            
+                            // Format the date nicely
+                            const formattedDate = formatDate(run.date);
+                            
+                            // Format the distance
+                            const distance = parseFloat(run.distance || 0).toFixed(2);
+                            
+                            runItem.innerHTML = `
+                                <div class="run-item-date">${formattedDate}</div>
+                                <div class="run-item-distance">${distance} miles</div>
+                                <div class="run-item-pace">${paceDisplay}</div>
+                                <div class="run-item-actions">
+                                    <button class="view-run-button" data-run-id="${run.id}">View Details</button>
+                                </div>
+                            `;
+                            
+                            // Add event listener for view button
+                            const viewButton = runItem.querySelector('.view-run-button');
+                            viewButton.addEventListener('click', () => {
+                                showRunDetails(run);
+                            });
+                            
+                            runListElement.appendChild(runItem);
+                        });
+                        
+                        // If we have more than one run, show a link to see all runs
+                        if (runs.length > 10) {
+                            const viewMoreItem = document.createElement('div');
+                            viewMoreItem.className = 'view-more-runs';
+                            viewMoreItem.innerHTML = `
+                                <button class="view-all-button">View All ${runs.length} Runs</button>
+                            `;
+                            runListElement.appendChild(viewMoreItem);
+                            
+                            // Add event listener for view all button
+                            const viewAllButton = viewMoreItem.querySelector('.view-all-button');
+                            viewAllButton.addEventListener('click', () => {
+                                // Show all runs
+                                runListElement.innerHTML = '';
+                                runs.forEach(run => {
+                                    // Same code as above to create run items
+                                    let paceDisplay = 'N/A';
+                                    if (run.data && run.data.total_distance > 0) {
+                                        const runData = run.data;
+                                        let totalTime = 0;
+                                        
+                                        if (runData.fast_segments && runData.slow_segments) {
+                                            const allSegments = [...runData.fast_segments, ...runData.slow_segments];
+                                            allSegments.forEach(segment => {
+                                                if (segment.time_diff) {
+                                                    totalTime += parseFloat(segment.time_diff);
+                                                }
+                                            });
+                                            
+                                            if (totalTime > 0) {
+                                                const paceMinutes = totalTime / runData.total_distance;
+                                                if (paceMinutes === "Infinity" || paceMinutes === Infinity || 
+                                                    isNaN(paceMinutes) || paceMinutes > 1000) {
+                                                    paceDisplay = 'N/A';
+                                                } else {
+                                                    const paceMinutesWhole = Math.floor(paceMinutes);
+                                                    const paceSeconds = Math.round((paceMinutes - paceMinutesWhole) * 60);
+                                                    paceDisplay = `${paceMinutesWhole}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    const runItem = document.createElement('div');
+                                    runItem.className = 'run-item';
+                                    runItem.innerHTML = `
+                                        <div class="run-item-date">${formatDate(run.date)}</div>
+                                        <div class="run-item-distance">${parseFloat(run.distance || 0).toFixed(2)} miles</div>
+                                        <div class="run-item-pace">${paceDisplay}</div>
+                                        <div class="run-item-actions">
+                                            <button class="view-run-button" data-run-id="${run.id}">View Details</button>
+                                        </div>
+                                    `;
+                                    
+                                    const viewButton = runItem.querySelector('.view-run-button');
+                                    viewButton.addEventListener('click', () => {
+                                        showRunDetails(run);
+                                    });
+                                    
+                                    runListElement.appendChild(runItem);
+                                });
+                            });
+                        }
+                    } else {
+                        lastRunDateElement.textContent = 'No runs yet';
+                        runListElement.innerHTML = '<p>You haven\'t recorded any runs yet. Upload a GPX file to get started!</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading run data:', error);
+                    loadingMessage.textContent = 'Error loading run data. Please try again.';
+                    loadingMessage.classList.remove('hidden');
+                });
+            }
+            
+            function showRunDetails(run) {
+                // Create a modal to show run details
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100%';
+                modal.style.height = '100%';
+                modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                modal.style.display = 'flex';
+                modal.style.justifyContent = 'center';
+                modal.style.alignItems = 'center';
+                modal.style.zIndex = '1000';
+                
+                const modalContent = document.createElement('div');
+                modalContent.style.backgroundColor = 'white';
+                modalContent.style.padding = '20px';
+                modalContent.style.borderRadius = '5px';
+                modalContent.style.maxWidth = '90%';
+                modalContent.style.maxHeight = '90%';
+                modalContent.style.overflow = 'auto';
+                
+                // Create an ID for the React components container
+                const reactContainerId = `react-components-${run.id}`;
+                
+                // Format run details
+                let runDetails = '';
+                if (run.data) {
+                    const data = run.data;
+                    
+                    // Basic run information
+                    runDetails += `<h2>Run Details - ${formatDate(run.date)}</h2>`;
+                    runDetails += `<div class="run-detail-section">`;
+                    runDetails += `<h3 class="section-title">Overview</h3>`;
+                    runDetails += `<div class="run-stats-summary">`;
+                    runDetails += `<div class="stat-box"><strong>Total Distance</strong><br>${parseFloat(data.total_distance || 0).toFixed(2)} miles</div>`;
+                    
+                    // Calculate total time if available
+                    let totalTime = 0;
+                    if (data.fast_segments && data.slow_segments) {
+                        const allSegments = [...data.fast_segments, ...data.slow_segments];
+                        allSegments.forEach(segment => {
+                            if (segment.time_diff) {
+                                totalTime += parseFloat(segment.time_diff);
+                            }
+                        });
+                    }
+                    
+                    // Format total time as HH:MM:SS
+                    let timeDisplay = 'N/A';
+                    if (totalTime > 0) {
+                        const hours = Math.floor(totalTime / 60);
+                        const minutes = Math.floor(totalTime % 60);
+                        const seconds = Math.round((totalTime - Math.floor(totalTime)) * 60);
+                        timeDisplay = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    }
+                    
+                    runDetails += `<div class="stat-box"><strong>Total Time</strong><br>${timeDisplay}</div>`;
+                    
+                    // Calculate average pace
+                    let avgPace = 'N/A';
+                    if (totalTime > 0 && data.total_distance > 0) {
+                        const paceMinutes = totalTime / data.total_distance;
+                        if (isFinite(paceMinutes)) {
+                            const paceMinutesWhole = Math.floor(paceMinutes);
+                            const paceSeconds = Math.round((paceMinutes - paceMinutesWhole) * 60);
+                            avgPace = `${paceMinutesWhole}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                        }
+                    }
+                    
+                    runDetails += `<div class="stat-box"><strong>Average Pace</strong><br>${avgPace}</div>`;
+                    runDetails += `</div>`; // End run-stats-summary
+                    
+                    // Fast vs Slow breakdown
+                    if (data.fast_distance && data.slow_distance) {
+                        runDetails += `<div class="run-stats-summary">`;
+                        runDetails += `<div class="stat-box"><strong>Fast Distance</strong><br>${parseFloat(data.fast_distance || 0).toFixed(2)} miles</div>`;
+                        runDetails += `<div class="stat-box"><strong>Slow Distance</strong><br>${parseFloat(data.slow_distance || 0).toFixed(2)} miles</div>`;
+                        
+                        if (data.percentage_fast && data.percentage_slow) {
+                            runDetails += `<div class="stat-box"><strong>Fast/Slow Ratio</strong><br>${parseFloat(data.percentage_fast || 0).toFixed(1)}% / ${parseFloat(data.percentage_slow || 0).toFixed(1)}%</div>`;
+                        }
+                        runDetails += `</div>`; // End run-stats-summary
+                    }
+                    
+                    // Heart rate data if available
+                    if (data.avg_hr_all || data.avg_hr_fast || data.avg_hr_slow) {
+                        runDetails += `<div class="run-stats-summary">`;
+                        if (data.avg_hr_all) {
+                            runDetails += `<div class="stat-box"><strong>Average HR</strong><br>${parseFloat(data.avg_hr_all || 0).toFixed(0)} bpm</div>`;
+                        }
+                        if (data.avg_hr_fast) {
+                            runDetails += `<div class="stat-box"><strong>Fast Avg HR</strong><br>${parseFloat(data.avg_hr_fast || 0).toFixed(0)} bpm</div>`;
+                        }
+                        if (data.avg_hr_slow) {
+                            runDetails += `<div class="stat-box"><strong>Slow Avg HR</strong><br>${parseFloat(data.avg_hr_slow || 0).toFixed(0)} bpm</div>`;
+                        }
+                        runDetails += `</div>`; // End run-stats-summary
+                    }
+                    runDetails += `</div>`; // End run-detail-section
+                    
+                    // Add container for React components
+                    runDetails += `<div id="${reactContainerId}" class="react-components-container"></div>`;
+                    
+                    // Prepare route map data
+                    const hasRouteData = data.fast_segments && data.fast_segments.length > 0 && 
+                                       data.fast_segments[0].coordinates &&
+                                       data.fast_segments[0].coordinates.length > 0;
+                    
+                    if (hasRouteData) {
+                        runDetails += `<div class="run-detail-section">`;
+                        runDetails += `<h3 class="section-title">Route Map</h3>`;
+                        runDetails += `<div id="run-map" class="map-container"></div>`;
+                        runDetails += `</div>`;
+                    }
+                    
+                    // Add elevation chart if available
+                    if (data.elevation_data && data.elevation_data.length > 0) {
+                        runDetails += `<div class="run-detail-section">`;
+                        runDetails += `<h3 class="section-title">Elevation Profile</h3>`;
+                        runDetails += `<div class="chart-container">`;
+                        runDetails += `<canvas id="elevation-chart"></canvas>`;
+                        runDetails += `</div>`;
+                        runDetails += `</div>`;
+                    }
+                    
+                    // Add pace/HR charts if we have segments
+                    if (data.fast_segments && data.slow_segments && 
+                        (data.fast_segments.length > 0 || data.slow_segments.length > 0)) {
+                        runDetails += `<div class="run-detail-section">`;
+                        runDetails += `<h3 class="section-title">Pace Analysis</h3>`;
+                        runDetails += `<div class="chart-container">`;
+                        runDetails += `<canvas id="pace-chart"></canvas>`;
+                        runDetails += `</div>`;
+                        
+                        // Only add HR chart if we have heart rate data
+                        const hasHrData = data.fast_segments.some(s => s.avg_hr) || 
+                                         data.slow_segments.some(s => s.avg_hr);
+                        
+                        if (hasHrData) {
+                            runDetails += `<div class="chart-container">`;
+                            runDetails += `<canvas id="hr-chart"></canvas>`;
+                            runDetails += `</div>`;
+                        }
+                        runDetails += `</div>`;
+                    }
+                    
+                    // Add segments section
+                    if (data.fast_segments && data.fast_segments.length > 0) {
+                        runDetails += `<div class="run-detail-section">`;
+                        runDetails += `<h3 class="section-title">Fast Segments</h3>`;
+                        runDetails += `<div class="segment-list">`;
+                        
+                        data.fast_segments.forEach((segment, index) => {
+                            // Format the pace for each segment
+                            let paceDisplay = 'N/A';
+                            if (segment.pace && isFinite(segment.pace)) {
+                                const paceMinutes = Math.floor(segment.pace);
+                                const paceSeconds = Math.round((segment.pace - paceMinutes) * 60);
+                                paceDisplay = `${paceMinutes}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                            }
+                            
+                            // Format the distance
+                            const distance = segment.distance ? parseFloat(segment.distance).toFixed(2) : 'N/A';
+                            
+                            // Format time in MM:SS
+                            let timeDisplay = 'N/A';
+                            if (segment.time_diff && isFinite(segment.time_diff)) {
+                                const minutes = Math.floor(segment.time_diff);
+                                const seconds = Math.round((segment.time_diff - minutes) * 60);
+                                timeDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                            }
+                            
+                            runDetails += `<div class="segment-item fast">`;
+                            runDetails += `<div>Segment ${index + 1}</div>`;
+                            runDetails += `<div class="segment-data">`;
+                            runDetails += `Distance: ${distance} mi | Pace: ${paceDisplay} | Time: ${timeDisplay}`;
+                            if (segment.avg_hr) {
+                                runDetails += ` | HR: ${Math.round(segment.avg_hr)} bpm`;
+                            }
+                            runDetails += `</div>`;
+                            runDetails += `</div>`;
+                        });
+                        
+                        runDetails += `</div>`; // End segment-list
+                        runDetails += `</div>`; // End run-detail-section
+                    }
+                    
+                    if (data.slow_segments && data.slow_segments.length > 0) {
+                        runDetails += `<div class="run-detail-section">`;
+                        runDetails += `<h3 class="section-title">Slow Segments</h3>`;
+                        runDetails += `<div class="segment-list">`;
+                        
+                        data.slow_segments.forEach((segment, index) => {
+                            // Format the pace for each segment
+                            let paceDisplay = 'N/A';
+                            if (segment.pace && isFinite(segment.pace)) {
+                                const paceMinutes = Math.floor(segment.pace);
+                                const paceSeconds = Math.round((segment.pace - paceMinutes) * 60);
+                                paceDisplay = `${paceMinutes}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                            }
+                            
+                            // Format the distance
+                            const distance = segment.distance ? parseFloat(segment.distance).toFixed(2) : 'N/A';
+                            
+                            // Format time in MM:SS
+                            let timeDisplay = 'N/A';
+                            if (segment.time_diff && isFinite(segment.time_diff)) {
+                                const minutes = Math.floor(segment.time_diff);
+                                const seconds = Math.round((segment.time_diff - minutes) * 60);
+                                timeDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                            }
+                            
+                            runDetails += `<div class="segment-item slow">`;
+                            runDetails += `<div>Segment ${index + 1}</div>`;
+                            runDetails += `<div class="segment-data">`;
+                            runDetails += `Distance: ${distance} mi | Pace: ${paceDisplay} | Time: ${timeDisplay}`;
+                            if (segment.avg_hr) {
+                                runDetails += ` | HR: ${Math.round(segment.avg_hr)} bpm`;
+                            }
+                            runDetails += `</div>`;
+                            runDetails += `</div>`;
+                        });
+                        
+                        runDetails += `</div>`; // End segment-list
+                        runDetails += `</div>`; // End run-detail-section
+                    }
+                }
+                
+                // Close button
+                const closeButton = document.createElement('button');
+                closeButton.textContent = 'Close';
+                closeButton.className = 'login-button';
+                closeButton.style.width = 'auto';
+                closeButton.style.marginTop = '15px';
+                closeButton.addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                });
+                
+                modalContent.innerHTML = runDetails;
+                modalContent.appendChild(closeButton);
+                modal.appendChild(modalContent);
+                document.body.appendChild(modal);
+                
+                // Close modal when clicking outside
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                    }
+                });
+                
+                // Initialize charts, map, and React components
+                initializeComponents(run, reactContainerId);
+            }
+            
+            function initializeComponents(run, containerId) {
+                // Initialize maps and charts first
+                initializeMap(run);
+                initializeCharts(run);
+                
+                // TODO: If you have the React components available, you could initialize them here
+                // by passing the run data to your global React app
+            }
+            
+            function initializeMap(run) {
+                // Initialize map if we have route data
+                if (run.data && run.data.fast_segments && run.data.fast_segments.length > 0 && 
+                    run.data.fast_segments[0].coordinates && run.data.fast_segments[0].coordinates.length > 0) {
+                    
+                    // Wait for the DOM to be updated
+                    setTimeout(() => {
+                        const mapElement = document.getElementById('run-map');
+                        if (mapElement) {
+                            // Initialize the map
+                            const allSegments = [
+                                ...(run.data.fast_segments || []).map(s => ({ ...s, type: 'fast' })),
+                                ...(run.data.slow_segments || []).map(s => ({ ...s, type: 'slow' }))
+                            ];
+                            
+                            // Find first segment with coordinates
+                            const firstCoordSegment = allSegments.find(s => s.coordinates && s.coordinates.length > 0);
+                            if (firstCoordSegment) {
+                                // Get the center coordinate
+                                const centerCoord = firstCoordSegment.coordinates[0];
+                                
+                                // Initialize map
+                                const map = L.map('run-map').setView(centerCoord, 15);
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                }).addTo(map);
+                                
+                                // Add polylines for each segment
+                                allSegments.forEach(segment => {
+                                    if (segment.coordinates && segment.coordinates.length > 0) {
+                                        const color = segment.type === 'fast' ? '#4CAF50' : '#FF5252';
+                                        const polyline = L.polyline(segment.coordinates, {
+                                            color: color,
+                                            weight: 3
+                                        }).addTo(map);
+                                        
+                                        // Add tooltip
+                                        polyline.bindTooltip(`${segment.type.charAt(0).toUpperCase() + segment.type.slice(1)} Segment`);
+                                    }
+                                });
+                                
+                                // Fit map to all coordinates
+                                const bounds = [];
+                                allSegments.forEach(segment => {
+                                    if (segment.coordinates && segment.coordinates.length > 0) {
+                                        segment.coordinates.forEach(coord => bounds.push(coord));
+                                    }
+                                });
+                                
+                                if (bounds.length > 0) {
+                                    map.fitBounds(bounds);
+                                }
+                            }
+                        }
+                    }, 100);
+                }
+            }
+            
+            function initializeCharts(run) {
+                // Initialize elevation chart if available
+                if (run.data && run.data.elevation_data && run.data.elevation_data.length > 0) {
+                    setTimeout(() => {
+                        const elevationChartElement = document.getElementById('elevation-chart');
+                        if (elevationChartElement) {
+                            const elevationData = run.data.elevation_data;
+                            const distances = elevationData.map((_, index) => 
+                                (index / (elevationData.length - 1) * run.data.total_distance).toFixed(2));
+                            const elevations = elevationData.map(point => point.elevation);
+                            
+                            new Chart(elevationChartElement, {
+                                type: 'line',
+                                data: {
+                                    labels: distances,
+                                    datasets: [{
+                                        label: 'Elevation (ft)',
+                                        data: elevations,
+                                        fill: true,
+                                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                        borderColor: 'rgba(75, 192, 192, 1)',
+                                        tension: 0.4
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    scales: {
+                                        x: {
+                                            title: {
+                                                display: true,
+                                                text: 'Distance (miles)'
+                                            }
+                                        },
+                                        y: {
+                                            title: {
+                                                display: true,
+                                                text: 'Elevation (ft)'
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }, 100);
+                }
+                
+                // Initialize pace and HR charts
+                initializePaceChart(run);
+                initializeHeartRateChart(run);
+            }
+            
+            function initializePaceChart(run) {
+                // Initialize pace chart
+                if (run.data && run.data.fast_segments && run.data.slow_segments && 
+                    (run.data.fast_segments.length > 0 || run.data.slow_segments.length > 0)) {
+                    
+                    setTimeout(() => {
+                        const paceChartElement = document.getElementById('pace-chart');
+                        if (paceChartElement) {
+                            const allSegments = [
+                                ...(run.data.fast_segments || []).map(s => ({ ...s, type: 'fast' })),
+                                ...(run.data.slow_segments || []).map(s => ({ ...s, type: 'slow' }))
+                            ];
+                            
+                            // Sort segments by distance/time order
+                            allSegments.sort((a, b) => {
+                                if (a.start_time && b.start_time) {
+                                    return new Date(a.start_time) - new Date(b.start_time);
+                                }
+                                return 0;
+                            });
+                            
+                            // Prepare data
+                            const labels = allSegments.map((segment, index) => `Segment ${index + 1}`);
+                            const paceData = allSegments.map(segment => {
+                                if (segment.pace && isFinite(segment.pace)) {
+                                    return segment.pace;
+                                }
+                                return null;
+                            });
+                            
+                            const backgroundColor = allSegments.map(segment =>
+                                segment.type === 'fast' ? 'rgba(76, 175, 80, 0.5)' : 'rgba(255, 82, 82, 0.5)'
+                            );
+                            
+                            const borderColor = allSegments.map(segment =>
+                                segment.type === 'fast' ? 'rgba(76, 175, 80, 1)' : 'rgba(255, 82, 82, 1)'
+                            );
+                            
+                            new Chart(paceChartElement, {
+                                type: 'bar',
+                                data: {
+                                    labels: labels,
+                                    datasets: [{
+                                        label: 'Pace (min/mile)',
+                                        data: paceData,
+                                        backgroundColor: backgroundColor,
+                                        borderColor: borderColor,
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    scales: {
+                                        y: {
+                                            title: {
+                                                display: true,
+                                                text: 'Pace (min/mile)'
+                                            },
+                                            reverse: true // Lower pace (faster) at top
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }, 100);
+                }
+            }
+            
+            function initializeHeartRateChart(run) {
+                // Initialize heart rate chart if we have HR data
+                setTimeout(() => {
+                    const hrChartElement = document.getElementById('hr-chart');
+                    if (hrChartElement && run.data) {
+                        const allSegments = [
+                            ...(run.data.fast_segments || []).map(s => ({ ...s, type: 'fast' })),
+                            ...(run.data.slow_segments || []).map(s => ({ ...s, type: 'slow' }))
+                        ];
+                        
+                        // Sort segments by distance/time order
+                        allSegments.sort((a, b) => {
+                            if (a.start_time && b.start_time) {
+                                return new Date(a.start_time) - new Date(b.start_time);
+                            }
+                            return 0;
+                        });
+                        
+                        // Check if we have HR data
+                        const hasHrData = allSegments.some(s => s.avg_hr);
+                        
+                        if (hasHrData) {
+                            // Prepare data
+                            const labels = allSegments.map((segment, index) => `Segment ${index + 1}`);
+                            const hrData = allSegments.map(segment => {
+                                if (segment.avg_hr && isFinite(segment.avg_hr)) {
+                                    return segment.avg_hr;
+                                }
+                                return null;
+                            });
+                            
+                            const backgroundColor = allSegments.map(segment =>
+                                segment.type === 'fast' ? 'rgba(76, 175, 80, 0.5)' : 'rgba(255, 82, 82, 0.5)'
+                            );
+                            
+                            const borderColor = allSegments.map(segment =>
+                                segment.type === 'fast' ? 'rgba(76, 175, 80, 1)' : 'rgba(255, 82, 82, 1)'
+                            );
+                            
+                            new Chart(hrChartElement, {
+                                type: 'bar',
+                                data: {
+                                    labels: labels,
+                                    datasets: [{
+                                        label: 'Heart Rate (bpm)',
+                                        data: hrData,
+                                        backgroundColor: backgroundColor,
+                                        borderColor: borderColor,
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    scales: {
+                                        y: {
+                                            title: {
+                                                display: true,
+                                                text: 'Heart Rate (bpm)'
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }, 100);
+            }
+            
+            function formatDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+            
+            function showLoginForm() {
+                // Clear session
+                sessionStorage.removeItem('user_id');
+                sessionStorage.removeItem('username');
+                
+                // Reset button state
+                logoutButton.disabled = false;
+                logoutButton.textContent = 'Logout';
+                
+                // Show login form
+                authContainer.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                
+                // Reset to login mode if was in register mode
+                if (isRegistering) {
+                    isRegistering = false;
+                    authTitle.textContent = 'Welcome Back';
+                    authSubtitle.textContent = 'Sign in to access your running analytics';
+                    submitButton.textContent = 'Sign In';
+                    toggleAuthButton.textContent = 'Need an account? Create one';
+                    emailGroup.classList.add('hidden');
+                }
+                
+                // Clear the form and errors
+                authForm.reset();
+                authError.classList.add('hidden');
+                
+                // Enable submit button
+                submitButton.disabled = false;
+            }
+            
+            function checkAuthStatus() {
+                fetch('/auth/check', {
+                    credentials: 'include'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Auth check response:', data);
+                    if (data.authenticated) {
+                        handleLogin(data.user_id, data.username);
+                    } else {
+                        showLoginForm();
+                    }
+                })
+                .catch(error => {
+                    console.error('Auth check error:', error);
+                    showLoginForm(); // Default to login form on error
+                });
+            }
+
+            // Handle file upload
+            const uploadForm = document.getElementById('upload-form');
+            const uploadButton = document.getElementById('upload-button');
+            const cancelUploadButton = document.getElementById('cancel-upload');
+            const uploadMessage = document.getElementById('upload-message');
+            const userAgeInput = document.getElementById('user-age');
+            const restingHrInput = document.getElementById('resting-hr');
+            
+            if (uploadForm) {
+                // Initialize with saved profile values if available
+                const savedAge = localStorage.getItem('user_age');
+                const savedRestingHr = localStorage.getItem('user_resting_hr');
+                
+                if (savedAge) {
+                    userAgeInput.value = savedAge;
+                }
+                
+                if (savedRestingHr) {
+                    restingHrInput.value = savedRestingHr;
+                }
+                
+                // Handle cancel button
+                cancelUploadButton.addEventListener('click', () => {
+                    uploadForm.reset();
+                    uploadMessage.classList.add('hidden');
+                    
+                    // Restore saved values
+                    if (savedAge) userAgeInput.value = savedAge;
+                    if (savedRestingHr) restingHrInput.value = savedRestingHr;
+                });
+                
+                // Save profile values when they change
+                userAgeInput.addEventListener('change', () => {
+                    if (userAgeInput.value) {
+                        localStorage.setItem('user_age', userAgeInput.value);
+                    }
+                });
+                
+                restingHrInput.addEventListener('change', () => {
+                    if (restingHrInput.value) {
+                        localStorage.setItem('user_resting_hr', restingHrInput.value);
+                    }
+                });
+                
+                uploadForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    // Validate form
+                    const fileInput = document.getElementById('gpx-file');
+                    const paceLimitInput = document.getElementById('pace-limit');
+                    
+                    if (!fileInput.files || fileInput.files.length === 0) {
+                        showUploadMessage('Please select a GPX file to upload', 'error');
+                        return;
+                    }
+                    
+                    const fileExt = fileInput.files[0].name.split('.').pop().toLowerCase();
+                    if (fileExt !== 'gpx') {
+                        showUploadMessage('Please select a valid GPX file', 'error');
+                        return;
+                    }
+                    
+                    const paceLimit = parseFloat(paceLimitInput.value);
+                    if (isNaN(paceLimit) || paceLimit <= 0) {
+                        showUploadMessage('Please enter a valid pace limit', 'error');
+                        return;
+                    }
+                    
+                    // Clear previous messages
+                    uploadMessage.textContent = '';
+                    uploadMessage.classList.remove('success', 'error', 'hidden');
+                    
+                    // Show loading state
+                    uploadButton.disabled = true;
+                    uploadButton.textContent = 'Uploading...';
+                    showUploadMessage('Uploading and analyzing your run...', 'info');
+                    
+                    // Create progress indicator
+                    const progressContainer = document.createElement('div');
+                    progressContainer.className = 'progress-container';
+                    const progressBar = document.createElement('div');
+                    progressBar.className = 'progress-bar';
+                    progressContainer.appendChild(progressBar);
+                    uploadMessage.appendChild(progressContainer);
+                    
+                    // Simulate progress (since we can't get actual upload progress)
+                    let progress = 0;
+                    const progressInterval = setInterval(() => {
+                        progress += 5;
+                        if (progress > 90) clearInterval(progressInterval);
+                        progressBar.style.width = `${progress}%`;
+                    }, 300);
+                    
+                    // Get form data
+                    const formData = new FormData(uploadForm);
+                    
+                    // Make API request
+                    fetch('/analyze', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'include'
+                    })
+                    .then(response => {
+                        clearInterval(progressInterval);
+                        progressBar.style.width = '100%';
+                        
+                        if (!response.ok) {
+                            throw new Error(`Server returned error: ${response.status} - ${response.statusText}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Upload successful:', data);
+                        
+                        // Format a detailed success message
+                        let successMessage = 'Run uploaded and analyzed successfully!<br>';
+                        
+                        if (data.distance) {
+                            successMessage += `<br>• Total Distance: ${parseFloat(data.distance).toFixed(2)} miles`;
+                        }
+                        
+                        if (data.data) {
+                            if (data.data.fast_distance && data.data.slow_distance) {
+                                successMessage += `<br>• Fast Distance: ${parseFloat(data.data.fast_distance).toFixed(2)} miles`;
+                                successMessage += `<br>• Slow Distance: ${parseFloat(data.data.slow_distance).toFixed(2)} miles`;
+                            }
+                            
+                            if (data.data.percentage_fast && data.data.percentage_slow) {
+                                successMessage += `<br>• Fast/Slow Ratio: ${parseFloat(data.data.percentage_fast).toFixed(1)}% / ${parseFloat(data.data.percentage_slow).toFixed(1)}%`;
+                            }
+                            
+                            if (data.data.avg_hr_all) {
+                                successMessage += `<br>• Average Heart Rate: ${Math.round(data.data.avg_hr_all)} bpm`;
+                            }
+                        }
+                        
+                        // Show success message
+                        showUploadMessage(successMessage, 'success');
+                        
+                        // Reset form except for age and resting HR
+                        fileInput.value = '';
+                        
+                        // Reset button
+                        uploadButton.disabled = false;
+                        uploadButton.textContent = 'Upload Run';
+                        
+                        // Reload run data to show new upload
+                        setTimeout(() => {
+                            loadRunData();
+                        }, 1000);
+                    })
+                    .catch(error => {
+                        console.error('Upload error:', error);
+                        clearInterval(progressInterval);
+                        
+                        // Show error message
+                        showUploadMessage(`Error uploading run: ${error.message || 'Unknown error'}`, 'error');
+                        
+                        // Reset button
+                        uploadButton.disabled = false;
+                        uploadButton.textContent = 'Upload Run';
+                    });
+                });
+                
+                // Helper function to show upload messages
+                function showUploadMessage(message, type) {
+                    uploadMessage.innerHTML = message;
+                    uploadMessage.classList.remove('hidden', 'success', 'error', 'info');
+                    uploadMessage.classList.add(type);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

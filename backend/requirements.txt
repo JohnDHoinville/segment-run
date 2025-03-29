@@ -1,6 +1,9 @@
 flask==2.0.1
 flask-cors==3.0.10
-werkzeug==2.0.1
-pytz==2021.1
-tzlocal==2.1
+flask-session==0.4.0
 python-dotenv==0.19.0
+gunicorn==21.2.0
+werkzeug==2.0.1
+psycopg2-binary==2.8.6
+tzlocal==4.3
+pytz==2023.3

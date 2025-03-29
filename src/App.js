@@ -1013,8 +1013,6 @@ const findMileSplits = (results) => {
 };
 
 function App() {
-  const API_URL = 'http://localhost:5001';
-
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -1066,15 +1064,27 @@ function App() {
       try {
         console.log('Checking auth at:', `${API_URL}/auth/check`);
         const response = await fetch(`${API_URL}/auth/check`, {
-          credentials: 'include'
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          mode: 'cors'
         });
+        
+        console.log('Auth check response status:', response.status);
+        console.log('Auth check response headers:', Object.fromEntries([...response.headers]));
+        
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
         const data = await response.json();
-        console.log('Auth check response:', data);
+        console.log('Auth check response data:', data);
+        
         if (data.authenticated) {
           setUserId(data.user_id);
+          setUsername(data.username || '');
           setIsAuthenticated(true);
         } else {
           setIsAuthenticated(false);
@@ -1088,7 +1098,7 @@ function App() {
       }
     };
     checkAuth();
-  }, []);
+  }, [API_URL]);
 
   // Load profile on mount
   useEffect(() => {
@@ -1812,14 +1822,14 @@ function App() {
         <h2>Run History</h2>
         {runs.length > 0 && console.log('Run data sample:', runs[0])}
         <div className="history-controls">
-          <button 
+            <button 
             className="compare-button" 
             disabled={selectedRuns.length < 2}
             onClick={() => onCompareRuns(selectedRuns)}
-          >
+            >
             Compare Selected Runs
-          </button>
-        </div>
+            </button>
+          </div>
         <div className="table-container">
           <table className="history-table">
             <thead>
@@ -1991,7 +2001,7 @@ function App() {
                             }
                           })()}
                         </span>
-                      </div>
+        </div>
                     </td>
                     <td>
                       <div className="action-buttons">
@@ -2046,9 +2056,9 @@ function App() {
             </tbody>
           </table>
         </div>
-      </div>
-    );
-  };
+    </div>
+  );
+};
 
   const RunComparison = ({ runs, onClose }) => {
     if (!runs || runs.length !== 2) {
@@ -2120,7 +2130,7 @@ function App() {
 
     console.log('Calculated distances:', { run1Distance, run2Distance });
 
-    return (
+  return (
       <div className="run-comparison">
         <div className="comparison-header">
           <h2>Run Comparison</h2>
@@ -2315,7 +2325,7 @@ function App() {
   return (
     <ThemeProvider>
       <TableProvider>
-        <div className="App">
+    <div className="App">
           {loading && <LoadingSpinner />}
           {error && <ErrorMessage message={error} />}
           
@@ -2522,7 +2532,7 @@ function App() {
                               <p className="no-splits-explanation">
                                 Mile splits are generated during analysis and may not be available for all runs.
                               </p>
-                            </div>
+    </div>
                           );
                         }
                       })()}

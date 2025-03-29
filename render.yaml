@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: gpx4u
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && python server_render.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: FLASK_ENV
+        value: production
+      - key: PORT
+        value: 10000
