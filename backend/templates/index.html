@@ -166,6 +166,70 @@
             padding: 8px 15px;
             margin-top: 0;
         }
+        
+        /* Run data styling */
+        #run-stats-summary {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        
+        .stat-box {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            flex-basis: 30%;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        #run-list {
+            margin-top: 15px;
+        }
+        
+        .run-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .run-item-date {
+            font-weight: bold;
+            flex-basis: 20%;
+        }
+        
+        .run-item-distance {
+            flex-basis: 20%;
+        }
+        
+        .run-item-pace {
+            flex-basis: 20%;
+        }
+        
+        .run-item-actions {
+            flex-basis: 20%;
+            text-align: right;
+        }
+        
+        .view-run-button {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .view-run-button:hover {
+            background-color: #3367d6;
+        }
     </style>
 </head>
 <body>
@@ -239,8 +303,25 @@
             <!-- Main app content - shown after login -->
             <div id="app-container" class="container hidden">
                 <h2>Welcome to GPX4U</h2>
-                <p>Your running data analysis application is loading...</p>
-                <p>If this message persists, please check that your API server is running correctly.</p>
+                <p id="loading-message">Your running data is loading...</p>
+                <div id="run-data-container" class="hidden">
+                    <h3>Your Running History</h3>
+                    <div id="run-stats-summary">
+                        <div class="stat-box">
+                            <strong>Total Runs:</strong> <span id="total-runs">0</span>
+                        </div>
+                        <div class="stat-box">
+                            <strong>Total Distance:</strong> <span id="total-distance">0</span> miles
+                        </div>
+                        <div class="stat-box">
+                            <strong>Last Run:</strong> <span id="last-run-date">None</span>
+                        </div>
+                    </div>
+                    <div id="run-list-container">
+                        <h4>Recent Runs</h4>
+                        <div id="run-list"></div>
+                    </div>
+                </div>
                 
                 <div id="user-info" class="hidden">
                     <p>Logged in as: <span id="username-display"></span></p>
@@ -412,11 +493,139 @@
                 sessionStorage.setItem('user_id', userId);
                 sessionStorage.setItem('username', username);
                 
-                // Reload the page to get the full app
-                setTimeout(() => {
-                    // Fully reload to go to the main app
-                    window.location.href = '/runs';
-                }, 500);
+                // Load the run data directly instead of redirecting
+                loadRunData();
+            }
+            
+            function loadRunData() {
+                const loadingMessage = document.getElementById('loading-message');
+                const runDataContainer = document.getElementById('run-data-container');
+                const totalRunsElement = document.getElementById('total-runs');
+                const totalDistanceElement = document.getElementById('total-distance');
+                const lastRunDateElement = document.getElementById('last-run-date');
+                const runListElement = document.getElementById('run-list');
+                
+                // Show loading message
+                loadingMessage.textContent = 'Loading your running data...';
+                loadingMessage.classList.remove('hidden');
+                runDataContainer.classList.add('hidden');
+                
+                // Fetch the run data from the API
+                fetch('/api/runs', {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch run data');
+                    }
+                    return response.json();
+                })
+                .then(runs => {
+                    console.log('Fetched runs:', runs);
+                    
+                    // Hide loading message and show data container
+                    loadingMessage.classList.add('hidden');
+                    runDataContainer.classList.remove('hidden');
+                    
+                    // Update summary stats
+                    const totalRuns = runs.length;
+                    totalRunsElement.textContent = totalRuns;
+                    
+                    let totalDistance = 0;
+                    runs.forEach(run => {
+                        totalDistance += parseFloat(run.distance || 0);
+                    });
+                    totalDistanceElement.textContent = totalDistance.toFixed(2);
+                    
+                    // Get most recent run date
+                    if (totalRuns > 0) {
+                        // Sort runs by date (newest first)
+                        runs.sort((a, b) => new Date(b.date) - new Date(a.date));
+                        const latestRun = runs[0];
+                        lastRunDateElement.textContent = formatDate(latestRun.date);
+                        
+                        // Display the runs in the list
+                        runListElement.innerHTML = '';
+                        
+                        // Show at most 10 most recent runs
+                        const recentRuns = runs.slice(0, 10);
+                        
+                        recentRuns.forEach(run => {
+                            // Calculate pace (mins per mile) if we have distance and time data
+                            let paceDisplay = 'N/A';
+                            if (run.data && run.data.total_distance > 0) {
+                                const runData = run.data;
+                                // Find total time from segments if available
+                                let totalTime = 0;
+                                
+                                if (runData.fast_segments && runData.slow_segments) {
+                                    // Sum up time from all segments
+                                    const allSegments = [...runData.fast_segments, ...runData.slow_segments];
+                                    allSegments.forEach(segment => {
+                                        if (segment.time_diff) {
+                                            totalTime += segment.time_diff;
+                                        }
+                                    });
+                                    
+                                    // Calculate pace in minutes per mile
+                                    if (totalTime > 0) {
+                                        const paceMinutes = totalTime / runData.total_distance;
+                                        const paceMinutesWhole = Math.floor(paceMinutes);
+                                        const paceSeconds = Math.round((paceMinutes - paceMinutesWhole) * 60);
+                                        paceDisplay = `${paceMinutesWhole}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                                    }
+                                }
+                            }
+                            
+                            // Create run item element
+                            const runItem = document.createElement('div');
+                            runItem.className = 'run-item';
+                            runItem.innerHTML = `
+                                <div class="run-item-date">${formatDate(run.date)}</div>
+                                <div class="run-item-distance">${parseFloat(run.distance || 0).toFixed(2)} miles</div>
+                                <div class="run-item-pace">${paceDisplay}</div>
+                                <div class="run-item-actions">
+                                    <button class="view-run-button" data-run-id="${run.id}">View Details</button>
+                                </div>
+                            `;
+                            
+                            // Add event listener for view button
+                            const viewButton = runItem.querySelector('.view-run-button');
+                            viewButton.addEventListener('click', () => {
+                                // For now, just log the run details to console
+                                console.log('Run details:', run);
+                                alert('Run details: ' + JSON.stringify({
+                                    date: run.date,
+                                    distance: run.distance,
+                                    pace: paceDisplay
+                                }, null, 2));
+                            });
+                            
+                            runListElement.appendChild(runItem);
+                        });
+                    } else {
+                        lastRunDateElement.textContent = 'No runs yet';
+                        runListElement.innerHTML = '<p>You haven\'t recorded any runs yet. Upload a GPX file to get started!</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading run data:', error);
+                    loadingMessage.textContent = 'Error loading run data. Please try again.';
+                    loadingMessage.classList.remove('hidden');
+                });
+            }
+            
+            function formatDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
             }
             
             function showLoginForm() {

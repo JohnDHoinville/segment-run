@@ -1985,11 +1985,11 @@ def serve_main_js_map_20250327():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route('/runs', methods=['GET'])
+@app.route('/api/runs', methods=['GET'])
 @login_required
-def get_runs():
+def get_runs_api():
     try:
-        print("\n=== Getting Run History ===")
+        print("\n=== Getting Run History API ===")
         print(f"User ID: {session['user_id']}")
         
         # Force database reset to ensure a clean connection
