@@ -230,6 +230,39 @@
         .view-run-button:hover {
             background-color: #3367d6;
         }
+        
+        /* Upload form styling */
+        #upload-container {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        
+        #upload-form .form-group {
+            margin-bottom: 10px;
+        }
+        
+        #upload-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        #upload-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        #upload-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        #upload-button {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -317,6 +350,24 @@
                             <strong>Last Run:</strong> <span id="last-run-date">None</span>
                         </div>
                     </div>
+                    
+                    <!-- Upload GPX form -->
+                    <div id="upload-container">
+                        <h4>Upload New Run</h4>
+                        <form id="upload-form" enctype="multipart/form-data">
+                            <div class="form-group">
+                                <label for="gpx-file">GPX File:</label>
+                                <input type="file" id="gpx-file" name="file" accept=".gpx" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pace-limit">Pace Limit (min/mile):</label>
+                                <input type="number" id="pace-limit" name="paceLimit" min="0" step="0.1" value="8.0">
+                            </div>
+                            <div id="upload-message" class="hidden"></div>
+                            <button type="submit" id="upload-button" class="login-button">Upload Run</button>
+                        </form>
+                    </div>
+                    
                     <div id="run-list-container">
                         <h4>Recent Runs</h4>
                         <div id="run-list"></div>
@@ -527,6 +578,14 @@
                 .then(runs => {
                     console.log('Fetched runs:', runs);
                     
+                    // Helper function to parse pace values that might be "Infinity"
+                    const parsePace = (pace) => {
+                        if (pace === "Infinity" || pace === "inf" || pace === Infinity) {
+                            return "N/A"; // Handle Infinity values
+                        }
+                        return pace;
+                    };
+                    
                     // Hide loading message and show data container
                     loadingMessage.classList.add('hidden');
                     runDataContainer.classList.remove('hidden');
@@ -567,16 +626,22 @@
                                     const allSegments = [...runData.fast_segments, ...runData.slow_segments];
                                     allSegments.forEach(segment => {
                                         if (segment.time_diff) {
-                                            totalTime += segment.time_diff;
+                                            totalTime += parseFloat(segment.time_diff);
                                         }
                                     });
                                     
                                     // Calculate pace in minutes per mile
                                     if (totalTime > 0) {
                                         const paceMinutes = totalTime / runData.total_distance;
-                                        const paceMinutesWhole = Math.floor(paceMinutes);
-                                        const paceSeconds = Math.round((paceMinutes - paceMinutesWhole) * 60);
-                                        paceDisplay = `${paceMinutesWhole}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                                        // Handle Infinity or very large values
+                                        if (paceMinutes === "Infinity" || paceMinutes === Infinity || 
+                                            isNaN(paceMinutes) || paceMinutes > 1000) {
+                                            paceDisplay = 'N/A';
+                                        } else {
+                                            const paceMinutesWhole = Math.floor(paceMinutes);
+                                            const paceSeconds = Math.round((paceMinutes - paceMinutesWhole) * 60);
+                                            paceDisplay = `${paceMinutesWhole}:${paceSeconds.toString().padStart(2, '0')} min/mi`;
+                                        }
                                     }
                                 }
                             }
@@ -596,13 +661,7 @@
                             // Add event listener for view button
                             const viewButton = runItem.querySelector('.view-run-button');
                             viewButton.addEventListener('click', () => {
-                                // For now, just log the run details to console
-                                console.log('Run details:', run);
-                                alert('Run details: ' + JSON.stringify({
-                                    date: run.date,
-                                    distance: run.distance,
-                                    pace: paceDisplay
-                                }, null, 2));
+                                showRunDetails(run);
                             });
                             
                             runListElement.appendChild(runItem);
@@ -616,6 +675,80 @@
                     console.error('Error loading run data:', error);
                     loadingMessage.textContent = 'Error loading run data. Please try again.';
                     loadingMessage.classList.remove('hidden');
+                });
+            }
+            
+            function showRunDetails(run) {
+                // Create a modal to show run details
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100%';
+                modal.style.height = '100%';
+                modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                modal.style.display = 'flex';
+                modal.style.justifyContent = 'center';
+                modal.style.alignItems = 'center';
+                modal.style.zIndex = '1000';
+                
+                const modalContent = document.createElement('div');
+                modalContent.style.backgroundColor = 'white';
+                modalContent.style.padding = '20px';
+                modalContent.style.borderRadius = '5px';
+                modalContent.style.maxWidth = '80%';
+                modalContent.style.maxHeight = '80%';
+                modalContent.style.overflow = 'auto';
+                
+                // Close button
+                const closeButton = document.createElement('button');
+                closeButton.textContent = 'Close';
+                closeButton.className = 'login-button';
+                closeButton.style.marginTop = '15px';
+                closeButton.addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                });
+                
+                // Format run details
+                let runDetails = '';
+                if (run.data) {
+                    const data = run.data;
+                    runDetails += `<h3>Run Details - ${formatDate(run.date)}</h3>`;
+                    runDetails += `<p><strong>Total Distance:</strong> ${parseFloat(data.total_distance || 0).toFixed(2)} miles</p>`;
+                    
+                    if (data.fast_distance && data.slow_distance) {
+                        runDetails += `<p><strong>Fast Distance:</strong> ${parseFloat(data.fast_distance || 0).toFixed(2)} miles</p>`;
+                        runDetails += `<p><strong>Slow Distance:</strong> ${parseFloat(data.slow_distance || 0).toFixed(2)} miles</p>`;
+                    }
+                    
+                    if (data.percentage_fast && data.percentage_slow) {
+                        runDetails += `<p><strong>Fast Percentage:</strong> ${parseFloat(data.percentage_fast || 0).toFixed(1)}%</p>`;
+                        runDetails += `<p><strong>Slow Percentage:</strong> ${parseFloat(data.percentage_slow || 0).toFixed(1)}%</p>`;
+                    }
+                    
+                    if (data.avg_hr_all) {
+                        runDetails += `<p><strong>Average Heart Rate:</strong> ${parseFloat(data.avg_hr_all || 0).toFixed(0)} bpm</p>`;
+                    }
+                    
+                    if (data.avg_hr_fast) {
+                        runDetails += `<p><strong>Fast Avg HR:</strong> ${parseFloat(data.avg_hr_fast || 0).toFixed(0)} bpm</p>`;
+                    }
+                    
+                    if (data.avg_hr_slow) {
+                        runDetails += `<p><strong>Slow Avg HR:</strong> ${parseFloat(data.avg_hr_slow || 0).toFixed(0)} bpm</p>`;
+                    }
+                }
+                
+                modalContent.innerHTML = runDetails;
+                modalContent.appendChild(closeButton);
+                modal.appendChild(modalContent);
+                document.body.appendChild(modal);
+                
+                // Close modal when clicking outside
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                    }
                 });
             }
             
@@ -675,6 +808,75 @@
                 .catch(error => {
                     console.error('Auth check error:', error);
                     showLoginForm(); // Default to login form on error
+                });
+            }
+
+            // Handle file upload
+            const uploadForm = document.getElementById('upload-form');
+            const uploadButton = document.getElementById('upload-button');
+            const uploadMessage = document.getElementById('upload-message');
+            
+            if (uploadForm) {
+                uploadForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    // Clear previous messages
+                    uploadMessage.textContent = '';
+                    uploadMessage.classList.remove('success', 'error', 'hidden');
+                    
+                    // Show loading state
+                    uploadButton.disabled = true;
+                    uploadButton.textContent = 'Uploading...';
+                    uploadMessage.textContent = 'Uploading and analyzing your run...';
+                    uploadMessage.classList.add('success');
+                    
+                    // Get form data
+                    const formData = new FormData(uploadForm);
+                    
+                    // Make API request
+                    fetch('/analyze', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'include'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Server returned error: ' + response.status);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Upload successful:', data);
+                        
+                        // Show success message
+                        uploadMessage.textContent = 'Run uploaded and analyzed successfully!';
+                        uploadMessage.classList.remove('error');
+                        uploadMessage.classList.add('success');
+                        
+                        // Reset form
+                        uploadForm.reset();
+                        
+                        // Reset button
+                        uploadButton.disabled = false;
+                        uploadButton.textContent = 'Upload Run';
+                        
+                        // Reload run data to show new upload
+                        setTimeout(() => {
+                            loadRunData();
+                        }, 1000);
+                    })
+                    .catch(error => {
+                        console.error('Upload error:', error);
+                        
+                        // Show error message
+                        uploadMessage.textContent = 'Error uploading run: ' + (error.message || 'Unknown error');
+                        uploadMessage.classList.remove('success');
+                        uploadMessage.classList.add('error');
+                        
+                        // Reset button
+                        uploadButton.disabled = false;
+                        uploadButton.textContent = 'Upload Run';
+                    });
                 });
             }
         });

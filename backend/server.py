@@ -12,6 +12,7 @@ from functools import wraps
 import secrets
 import traceback
 from json import JSONEncoder
+import math
 try:
     from app import app
 except ImportError:
@@ -2028,6 +2029,19 @@ def get_runs_api():
                                 run_data = {}
                         else:
                             run_data = run['data']
+                            
+                        # Handle Infinity values in JSON data
+                        def fix_infinity(obj):
+                            if isinstance(obj, dict):
+                                return {k: fix_infinity(v) for k, v in obj.items()}
+                            elif isinstance(obj, list):
+                                return [fix_infinity(i) for i in obj]
+                            elif obj == float('inf') or obj == float('-inf'):
+                                return str(obj)  # Convert Infinity to string
+                            else:
+                                return obj
+                        
+                        run_data = fix_infinity(run_data)
                     
                     # Create a formatted representation
                     formatted_run = {
@@ -2041,8 +2055,20 @@ def get_runs_api():
                     print(f"Error processing run {run.get('id', 'unknown')}: {str(run_error)}")
                     traceback.print_exc()
                     
-            # Return the formatted runs
-            response = jsonify(formatted_runs)
+            # Return the formatted runs with a custom JSON encoder that handles Infinity
+            class CustomJSONEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
+                        return str(obj)
+                    return super().default(obj)
+            
+            # Use the custom encoder
+            json_response = json.dumps(formatted_runs, cls=CustomJSONEncoder)
+            response = app.response_class(
+                response=json_response,
+                status=200,
+                mimetype='application/json'
+            )
             
             # Set CORS headers
             origin = request.headers.get('Origin', '')
@@ -2088,6 +2114,19 @@ def get_runs_api():
                                     run_data = {}
                             else:
                                 run_data = run['data']
+                            
+                            # Handle Infinity values in JSON data
+                            def fix_infinity(obj):
+                                if isinstance(obj, dict):
+                                    return {k: fix_infinity(v) for k, v in obj.items()}
+                                elif isinstance(obj, list):
+                                    return [fix_infinity(i) for i in obj]
+                                elif obj == float('inf') or obj == float('-inf'):
+                                    return str(obj)  # Convert Infinity to string
+                                else:
+                                    return obj
+                            
+                            run_data = fix_infinity(run_data)
                         
                         # Create a formatted representation
                         formatted_run = {
@@ -2100,7 +2139,20 @@ def get_runs_api():
                     except Exception as inner_run_error:
                         print(f"Error processing run after retry: {str(inner_run_error)}")
                 
-                response = jsonify(formatted_runs)
+                # Return the formatted runs with a custom JSON encoder that handles Infinity
+                class CustomJSONEncoder(json.JSONEncoder):
+                    def default(self, obj):
+                        if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
+                            return str(obj)
+                        return super().default(obj)
+                
+                # Use the custom encoder
+                json_response = json.dumps(formatted_runs, cls=CustomJSONEncoder)
+                response = app.response_class(
+                    response=json_response,
+                    status=200,
+                    mimetype='application/json'
+                )
                 
                 # Set CORS headers
                 origin = request.headers.get('Origin', '')
